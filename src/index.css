@@ -1,0 +1,91 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background-color: #212121;
+  color: #ececf1;
+  font-family: Inter, system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  min-height: 100vh;
+  background-color: #212121;
+}
+
+.header-sticky-bg {
+  background-color: #181818;
+}
+
+a[href^="http"] {
+  @apply break-all;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid #343541;
+  border-top-color: #8e8ea0;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes typing-bounce {
+  0%, 60%, 100% { transform: translateY(0); }
+  30% { transform: translateY(-4px); }
+}
+
+.typing-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #8e8ea0;
+  animation: typing-bounce 1.4s ease-in-out infinite;
+}
+.typing-dot:nth-child(1) { animation-delay: 0s; }
+.typing-dot:nth-child(2) { animation-delay: 0.2s; }
+.typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+.header-outer {
+  position: relative;
+}
+.header-row {
+  position: relative;
+}
+.lang-dropdown {
+  position: relative;
+  align-self: stretch;
+}
+.lang-dropdown-trigger {
+  outline: none;
+}
+.lang-dropdown-panel {
+  position: absolute;
+  left: -0.5rem;
+  top: 100%;
+  margin-top: 1rem;
+  padding: 4px 0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  border: none;
+  min-width: 120px;
+  background-color: #181818;
+  z-index: 30;
+}
+.lang-dropdown-option {
+  outline: none;
+  padding-left: 0.75rem;
+}
+.lang-dropdown-option:first-child {
+  padding-top: 8px;
+}
+.lang-dropdown-option:last-child {
+  padding-bottom: 8px;
+}
