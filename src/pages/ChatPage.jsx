@@ -55,6 +55,7 @@ function ChatPage() {
   const scrollContainerRef = useRef(null)
   const langDropdownRef = useRef(null)
   const [langDropdownOpen, setLangDropdownOpen] = useState(false)
+  const [videoModal, setVideoModal] = useState(null)
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -222,25 +223,152 @@ function ChatPage() {
     }
   }
 
-  const formatMessage = (text) => {
-    return text.split(/\n/g).map((line, i) => {
-      const parts = line.split(/(https?:\/\/[^\s]+)/g)
-      return (
-        <span key={i}>
-          {parts.map((part, j) =>
-            /^https?:\/\//.test(part) ? (
-              <a key={j} href={part} target="_blank" rel="noopener noreferrer" className="text-lefitness-muted underline hover:text-lefitness-text">
-                {part}
-              </a>
-            ) : (
-              part
-            )
-          )}
-          {i < text.split(/\n/g).length - 1 ? <br /> : null}
-        </span>
-      )
-    })
+const normalizeUrl = (raw) => raw.replace(/[)\].,!?;:]+$/g, '')
+
+const isYouTubeUrl = (url) => {
+  try {
+    const u = new URL(url)
+    return u.hostname.includes('youtube.com') || u.hostname.includes('youtu.be')
+  } catch {
+    return false
   }
+}
+
+const toYouTubeEmbedUrl = (url) => {
+  try {
+    const u = new URL(url)
+    let id = null
+
+    if (u.hostname.includes('youtu.be')) id = u.pathname.replace('/', '')
+    else if (u.hostname.includes('youtube.com') && u.pathname === '/watch') id = u.searchParams.get('v')
+    else if (u.hostname.includes('youtube.com') && u.pathname.startsWith('/embed/')) id = u.pathname.split('/')[2]
+
+    return id ? `https://www.youtube.com/embed/${id}?autoplay=1` : null
+  } catch {
+    return null
+  }
+}
+
+const isVideoUrl = (url) => {
+  if (!url) return false
+  if (isYouTubeUrl(url)) return true
+  if (url.includes('/api/videos/')) return true
+  return /\.(mp4|webm|ogg)(\?|$)/i.test(url)
+}
+
+const openVideo = (rawUrl) => {
+  const url = normalizeUrl(rawUrl)
+
+  if (isYouTubeUrl(url)) {
+    const embedUrl = toYouTubeEmbedUrl(url)
+    setVideoModal({ kind: 'youtube', url, embedUrl: embedUrl || url })
+  } else {
+    setVideoModal({ kind: 'file', url })
+  }
+}
+
+const closeVideo = () => setVideoModal(null)
+
+useEffect(() => {
+  if (!videoModal) return
+  const onKey = (e) => {
+    if (e.key === 'Escape') closeVideo()
+  }
+  document.addEventListener('keydown', onKey)
+  return () => document.removeEventListener('keydown', onKey)
+}, [videoModal])
+
+  const formatMessage = (text) => {
+    const lines = String(text ?? '').split(/\n/g)
+
+    // Matchar markdown-länk: [Text](URL) där URL börjar med http(s) eller /api/videos/
+    const mdLink = /\[([^\]]+)\]\(((?:https?:\/\/|\/api\/videos\/)[^\s)]+)\)/g
+
+    // Matchar vanliga länkar (http(s) eller /api/videos/)
+    const rawLink = /((?:https?:\/\/|\/api\/videos\/)[^\s]+)/g
+
+    const renderTextWithLinks = (line, lineIndex) => {
+      const out = []
+      let cursor = 0
+      let match
+      let key = 0
+
+      // 1) Plocka ut markdown-länkar först
+      while ((match = mdLink.exec(line)) !== null) {
+        const [full, label, urlRaw] = match
+        const start = match.index
+        const end = start + full.length
+
+        if (start > cursor) out.push(<span key={`t-${lineIndex}-${key++}`}>{line.slice(cursor, start)}</span>)
+
+        const url = normalizeUrl(urlRaw)
+        const video = isVideoUrl(url)
+
+        out.push(
+            <a
+                key={`md-${lineIndex}-${key++}`}
+                href={url}
+                onClick={(e) => {
+                  if (!video) return
+                  e.preventDefault()
+                  openVideo(url)
+                }}
+                target={video ? undefined : '_blank'}
+                rel={video ? undefined : 'noopener noreferrer'}
+                className="text-lefitness-muted underline hover:text-lefitness-text"
+            >
+              {label}
+            </a>
+        )
+
+        cursor = end
+      }
+
+      // Resterande text efter sista markdown-länken
+      const rest = line.slice(cursor)
+
+      // 2) Linkify vanliga URL:er i resten
+      const parts = rest.split(rawLink)
+      for (let i = 0; i < parts.length; i++) {
+        const part = parts[i]
+        const isLink = rawLink.test(part)
+        rawLink.lastIndex = 0 // reset pga global regex
+
+        if (!isLink) {
+          out.push(<span key={`r-${lineIndex}-${key++}`}>{part}</span>)
+        } else {
+          const url = normalizeUrl(part)
+          const video = isVideoUrl(url)
+
+          out.push(
+              <a
+                  key={`u-${lineIndex}-${key++}`}
+                  href={url}
+                  onClick={(e) => {
+                    if (!video) return
+                    e.preventDefault()
+                    openVideo(url)
+                  }}
+                  target={video ? undefined : '_blank'}
+                  rel={video ? undefined : 'noopener noreferrer'}
+                  className="text-lefitness-muted underline hover:text-lefitness-text"
+              >
+                {url}
+              </a>
+          )
+        }
+      }
+
+      return out
+    }
+
+  return lines.map((line, i) => (
+    <span key={i}>
+      {renderTextWithLinks(line, i)}
+      {i < lines.length - 1 ? <br /> : null}
+    </span>
+  ))
+}
 
   return (
     <div className="min-h-screen bg-lefitness-bg text-lefitness-text flex flex-col">
@@ -281,6 +409,49 @@ function ChatPage() {
             </div>
             <span className="text-lefitness-text text-sm">{t(language, 'chat')}</span>
           </div>
+          {videoModal && (
+              <div
+                  className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+                  onMouseDown={closeVideo}
+              >
+                <div
+                    className="w-full max-w-3xl rounded-xl bg-[#111] p-3"
+                    onMouseDown={(e) => e.stopPropagation()}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="text-sm text-lefitness-muted">Video</div>
+                    <button
+                        type="button"
+                        onClick={closeVideo}
+                        className="text-lefitness-muted hover:text-lefitness-text px-2 py-1"
+                        aria-label="Close"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  {videoModal.kind === 'youtube' ? (
+                      <div style={{aspectRatio: '16 / 9'}} className="w-full">
+                        <iframe
+                            className="w-full h-full rounded-lg"
+                            src={videoModal.embedUrl}
+                            title="YouTube video"
+                            allow="autoplay; encrypted-media; picture-in-picture"
+                            allowFullScreen
+                        />
+                      </div>
+                  ) : (
+                      <video
+                          className="w-full rounded-lg"
+                          src={videoModal.url}
+                          controls
+                          autoPlay
+                          playsInline
+                      />
+                  )}
+                </div>
+              </div>
+          )}
         </div>
       </header>
 
