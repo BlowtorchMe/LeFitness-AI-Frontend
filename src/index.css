@@ -1,6 +1,18 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+@theme {
+  --color-lefitness-bg: #212121;
+  --color-lefitness-header: #181818;
+  --color-lefitness-inputBar: #303030;
+  --color-lefitness-inputBox: #303030;
+  --color-lefitness-bubbleBot: #343541;
+  --color-lefitness-bubbleUser: #303030;
+  --color-lefitness-pill: #333333;
+  --color-lefitness-muted: #8e8ea0;
+  --color-lefitness-text: #ececf1;
+  --color-lefitness-sendHover: #e5e5e5;
+  --font-sans: Inter, system-ui, sans-serif;
+}
 
 html, body {
   margin: 0;

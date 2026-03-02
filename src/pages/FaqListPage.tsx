@@ -1,22 +1,23 @@
-import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { useState, useEffect, ChangeEvent } from "react"
+import { Link } from "react-router-dom"
+import type { FaqRecord } from "@/types/faq"
 
-const API_BASE = import.meta.env.VITE_API_URL || ''
+const API_BASE = import.meta.env.VITE_API_URL || ""
 const PAGE_SIZES = [5, 10, 20, 50, 100]
 const DEFAULT_PAGE_SIZE = 10
 
-function FaqListPage() {
+export default function FaqListPage() {
   const [page, setPage] = useState(1)
   const [size, setSize] = useState(DEFAULT_PAGE_SIZE)
   const [total, setTotal] = useState(0)
-  const [items, setItems] = useState([])
+  const [items, setItems] = useState<FaqRecord[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-  const [hoverId, setHoverId] = useState(null)
-  const [deletingId, setDeletingId] = useState(null)
-  const [deleteConfirmId, setDeleteConfirmId] = useState(null)
+  const [error, setError] = useState("")
+  const [hoverId, setHoverId] = useState<number | null>(null)
+  const [deletingId, setDeletingId] = useState<number | null>(null)
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null)
   const [reindexing, setReindexing] = useState(false)
-  const [reindexMessage, setReindexMessage] = useState('')
+  const [reindexMessage, setReindexMessage] = useState("")
 
   const totalPages = Math.max(1, Math.ceil(total / size))
 
@@ -25,34 +26,34 @@ function FaqListPage() {
     setLoading(true)
     fetch(`${API_BASE}/api/faq?page=${page}&size=${size}`)
       .then((res) => {
-        if (!res.ok) throw new Error('Failed to load FAQs')
+        if (!res.ok) throw new Error("Failed to load FAQs")
         return res.json()
       })
-      .then((data) => {
+      .then((data: { items: FaqRecord[]; total: number }) => {
         if (!cancelled) {
           setItems(data.items)
           setTotal(data.total)
         }
       })
-      .catch((err) => {
-        if (!cancelled) setError(err.message || 'Failed to load')
+      .catch((err: Error) => {
+        if (!cancelled) setError(err.message || "Failed to load")
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
       })
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+    }
   }, [page, size])
 
-  const handleSizeChange = (e) => {
+  const handleSizeChange = (e: ChangeEvent<HTMLSelectElement>) => {
     const newSize = Number(e.target.value)
     setSize(newSize)
     setPage(1)
   }
 
   const showPageNumbers = () => {
-    if (totalPages <= 3) {
-      return Array.from({ length: totalPages }, (_, i) => i + 1)
-    }
+    if (totalPages <= 3) return Array.from({ length: totalPages }, (_, i) => i + 1)
     const start = Math.max(1, page - 1)
     const end = Math.min(totalPages, page + 1)
     return Array.from({ length: end - start + 1 }, (_, i) => start + i)
@@ -60,48 +61,71 @@ function FaqListPage() {
 
   const pageNumbers = showPageNumbers()
   const showLeftEllipsis = totalPages > 3 && pageNumbers[0] > 1
-  const showRightEllipsis = totalPages > 3 && pageNumbers[pageNumbers.length - 1] < totalPages
+  const showRightEllipsis =
+    totalPages > 3 && pageNumbers[pageNumbers.length - 1] < totalPages
 
   useEffect(() => {
     if (deleteConfirmId == null) return
-    const handler = (e) => {
-      if (e.key === 'Escape' && deletingId !== deleteConfirmId) setDeleteConfirmId(null)
+    const handler = (e: Event) => {
+      if ((e as KeyboardEvent).key === "Escape" && deletingId !== deleteConfirmId)
+        setDeleteConfirmId(null)
     }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
+    document.addEventListener("keydown", handler)
+    return () => document.removeEventListener("keydown", handler)
   }, [deleteConfirmId, deletingId])
 
-  const handleDeleteConfirm = async (faqId) => {
+  const handleDeleteConfirm = async (faqId: number) => {
     setDeletingId(faqId)
-    setError('')
+    setError("")
     try {
-      const res = await fetch(`${API_BASE}/api/faq/${faqId}`, { method: 'DELETE' })
+      const res = await fetch(`${API_BASE}/api/faq/${faqId}`, { method: "DELETE" })
       if (res.status === 404) {
         setItems((prev) => prev.filter((f) => f.id !== faqId))
         setTotal((t) => Math.max(0, t - 1))
       } else if (!res.ok) {
-        throw new Error('Delete failed')
+        throw new Error("Delete failed")
       } else {
         setItems((prev) => prev.filter((f) => f.id !== faqId))
         setTotal((t) => Math.max(0, t - 1))
       }
     } catch (err) {
-      setError(err.message || 'Failed to delete')
+      setError(err instanceof Error ? err.message : "Failed to delete")
     } finally {
       setDeletingId(null)
       setDeleteConfirmId(null)
     }
   }
 
-  const iconBtn = 'w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 border-0 cursor-pointer'
+  const iconBtn =
+    "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 border-0 cursor-pointer"
   const editIcon = (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
       <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
       <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
     </svg>
   )
   const deleteIcon = (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
       <path d="M3 6h18" />
       <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
       <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
@@ -121,10 +145,15 @@ function FaqListPage() {
         >
           <div
             className="absolute inset-0 bg-black/60"
-            onClick={() => deletingId !== deleteConfirmId && setDeleteConfirmId(null)}
+            onClick={() =>
+              deletingId !== deleteConfirmId && setDeleteConfirmId(null)
+            }
           />
           <div className="relative rounded-lg bg-lefitness-header border border-[#303030] shadow-xl max-w-sm w-full p-5">
-            <h2 id="delete-modal-title" className="text-base font-semibold text-lefitness-text mb-2">
+            <h2
+              id="delete-modal-title"
+              className="text-base font-semibold text-lefitness-text mb-2"
+            >
               Delete this FAQ?
             </h2>
             <p className="text-sm text-lefitness-muted mb-5">
@@ -145,7 +174,7 @@ function FaqListPage() {
                 disabled={deletingId === deleteConfirmId}
                 className="px-4 py-2 rounded text-sm bg-red-600 text-white border-0 hover:bg-red-700 disabled:opacity-50"
               >
-                {deletingId === deleteConfirmId ? 'Deleting...' : 'Delete'}
+                {deletingId === deleteConfirmId ? "Deleting..." : "Delete"}
               </button>
             </div>
           </div>
@@ -174,25 +203,29 @@ function FaqListPage() {
               type="button"
               disabled={reindexing || total === 0}
               onClick={async () => {
-                setReindexMessage('')
+                setReindexMessage("")
                 setReindexing(true)
                 try {
-                  const res = await fetch(`${API_BASE}/api/faq/reindex`, { method: 'POST' })
+                  const res = await fetch(`${API_BASE}/api/faq/reindex`, {
+                    method: "POST",
+                  })
                   const data = await res.json().catch(() => ({}))
                   if (res.ok && data.success) {
                     setReindexMessage(`Reindexed ${data.count} FAQ(s).`)
                   } else {
-                    setReindexMessage(data.error || 'Reindex failed')
+                    setReindexMessage(data.error || "Reindex failed")
                   }
                 } catch (e) {
-                  setReindexMessage(e.message || 'Reindex failed')
+                  setReindexMessage(
+                    e instanceof Error ? e.message : "Reindex failed"
+                  )
                 } finally {
                   setReindexing(false)
                 }
               }}
               className="inline-flex items-center px-4 py-2 rounded-md text-sm bg-[#2a2a2a] text-lefitness-text border border-[#303030] hover:bg-[#333] disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {reindexing ? 'Reindexing...' : 'Reindex'}
+              {reindexing ? "Reindexing..." : "Reindex"}
             </button>
             <Link
               to="/faq-admin/add"
@@ -203,7 +236,9 @@ function FaqListPage() {
           </div>
         </div>
         {reindexMessage && (
-          <p className={`text-sm mb-4 ${reindexMessage.startsWith('Reindexed') ? 'text-green-400' : 'text-red-400'}`}>
+          <p
+            className={`text-sm mb-4 ${reindexMessage.startsWith("Reindexed") ? "text-green-400" : "text-red-400"}`}
+          >
             {reindexMessage}
           </p>
         )}
@@ -217,7 +252,9 @@ function FaqListPage() {
               className="bg-lefitness-header text-lefitness-text text-sm border border-[#303030] rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-lefitness-muted"
             >
               {PAGE_SIZES.map((n) => (
-                <option key={n} value={n}>{n}</option>
+                <option key={n} value={n}>
+                  {n}
+                </option>
               ))}
             </select>
           </label>
@@ -230,11 +267,11 @@ function FaqListPage() {
             <span className="typing-dot" />
           </div>
         )}
-        {error && (
-          <p className="text-red-400 text-sm">{error}</p>
-        )}
+        {error && <p className="text-red-400 text-sm">{error}</p>}
         {!loading && !error && total === 0 && (
-          <p className="text-lefitness-muted text-sm">No FAQs yet. Click Add to create one.</p>
+          <p className="text-lefitness-muted text-sm">
+            No FAQs yet. Click Add to create one.
+          </p>
         )}
         {!loading && !error && items.length > 0 && (
           <>
@@ -246,8 +283,12 @@ function FaqListPage() {
                   onMouseEnter={() => setHoverId(faq.id)}
                   onMouseLeave={() => setHoverId(null)}
                 >
-                  <p className="text-sm font-medium text-lefitness-text mb-1">{faq.question}</p>
-                  <p className="text-sm text-lefitness-muted whitespace-pre-wrap">{faq.answer}</p>
+                  <p className="text-sm font-medium text-lefitness-text mb-1">
+                    {faq.question}
+                  </p>
+                  <p className="text-sm text-lefitness-muted whitespace-pre-wrap">
+                    {faq.answer}
+                  </p>
                   {faq.video_link && (
                     <a
                       href={faq.video_link}
@@ -300,18 +341,22 @@ function FaqListPage() {
                 >
                   Prev
                 </button>
-                {showLeftEllipsis && <span className="px-2 text-lefitness-muted">...</span>}
+                {showLeftEllipsis && (
+                  <span className="px-2 text-lefitness-muted">...</span>
+                )}
                 {pageNumbers.map((n) => (
                   <button
                     key={n}
                     type="button"
                     onClick={() => setPage(n)}
-                    className={`px-3 py-1.5 rounded text-sm border ${n === page ? 'bg-[#ffffff] text-black border-[#ffffff]' : 'bg-lefitness-header border-[#303030] text-lefitness-text hover:bg-[#303030]'}`}
+                    className={`px-3 py-1.5 rounded text-sm border ${n === page ? "bg-[#ffffff] text-black border-[#ffffff]" : "bg-lefitness-header border-[#303030] text-lefitness-text hover:bg-[#303030]"}`}
                   >
                     {n}
                   </button>
                 ))}
-                {showRightEllipsis && <span className="px-2 text-lefitness-muted">...</span>}
+                {showRightEllipsis && (
+                  <span className="px-2 text-lefitness-muted">...</span>
+                )}
                 <button
                   type="button"
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
@@ -336,5 +381,3 @@ function FaqListPage() {
     </div>
   )
 }
-
-export default FaqListPage

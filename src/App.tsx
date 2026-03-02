@@ -1,8 +1,8 @@
-import { Routes, Route } from 'react-router-dom'
-import ChatPage from './pages/ChatPage'
-import FaqListPage from './pages/FaqListPage'
-import FaqAddPage from './pages/FaqAddPage'
-import FaqEditPage from './pages/FaqEditPage'
+import { Routes, Route } from "react-router-dom"
+import ChatPage from "@/pages/ChatPage"
+import FaqListPage from "@/pages/FaqListPage"
+import FaqAddPage from "@/pages/FaqAddPage"
+import FaqEditPage from "@/pages/FaqEditPage"
 
 function App() {
   return (
