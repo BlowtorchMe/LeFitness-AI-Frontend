@@ -1,4 +1,17 @@
 import { useState, useRef, useEffect, FormEvent, KeyboardEvent } from "react"
+import {
+  VideoPlayer,
+  VideoPlayerControlBar,
+  VideoPlayerContent,
+  VideoPlayerPlayButton,
+  VideoPlayerTimeRange,
+  VideoPlayerTimeDisplay,
+  VideoPlayerMuteButton,
+  VideoPlayerVolumeRange,
+  VideoPlayerSeekBackwardButton,
+  VideoPlayerSeekForwardButton,
+} from "@/components/ui/video-player"
+import BarcodeScanner from "@/components/ui/BarcodeScanner"
 
 const API_BASE = import.meta.env.VITE_API_URL || ""
 
@@ -38,6 +51,7 @@ interface ChatMessage {
   text?: string
   text_en?: string
   text_sv?: string
+  faq_video_url?: string | null
 }
 
 interface ChatResponse {
@@ -45,6 +59,24 @@ interface ChatResponse {
   messages?: string[]
   history?: { role: string; text?: string; text_en?: string; text_sv?: string }[]
   language?: string
+  faq_video_url?: string | null
+}
+
+function getYouTubeEmbed(url: string): string | null {
+  try {
+    const u = new URL(url)
+    if (u.hostname.includes("youtu.be")) {
+      const id = u.pathname.replace("/", "").trim()
+      return id ? `https://www.youtube.com/embed/${id}` : null
+    }
+    if (u.hostname.includes("youtube.com")) {
+      const id = u.searchParams.get("v")
+      return id ? `https://www.youtube.com/embed/${id}` : null
+    }
+    return null
+  } catch {
+    return null
+  }
 }
 
 export default function ChatPage() {
@@ -66,6 +98,8 @@ export default function ChatPage() {
   const [input, setInput] = useState("")
   const [loading, setLoading] = useState(false)
   const [layoutReady, setLayoutReady] = useState(false)
+  const [scannerOpen, setScannerOpen] = useState(false)
+
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -86,8 +120,9 @@ export default function ChatPage() {
       if (
         langDropdownRef.current &&
         !langDropdownRef.current.contains(e.target as Node)
-      )
+      ) {
         setLangDropdownOpen(false)
+      }
     }
     document.addEventListener("mousedown", onOutside)
     return () => document.removeEventListener("mousedown", onOutside)
@@ -99,6 +134,7 @@ export default function ChatPage() {
 
   useEffect(() => {
     if (!layoutReady) return
+
     if (sessionId && messages.length === 0) {
       let cancelled = false
       setLoading(true)
@@ -106,19 +142,25 @@ export default function ChatPage() {
         .then((data) => {
           if (cancelled) return
           persistSession(data.session_id)
+
           if (data.history && data.history.length > 0) {
-            if (data.language && data.language !== language)
-              setLang(data.language)
+            if (data.language && data.language !== language) setLang(data.language)
             setMessages(
               data.history.map((m) => ({
                 role: (m.role === "user" ? "user" : "bot") as "user" | "bot",
                 text_en: m.text_en ?? m.text,
                 text_sv: m.text_sv ?? m.text,
+                faq_video_url: null,
               }))
             )
           } else if (data.messages && data.messages.length > 0) {
             setMessages(
-              data.messages.map((text) => ({ role: "bot" as const, text }))
+              data.messages.map((text, idx) => ({
+                role: "bot" as const,
+                text,
+                faq_video_url:
+                  idx === data.messages!.length - 1 ? data.faq_video_url ?? null : null,
+              }))
             )
           }
         })
@@ -126,13 +168,16 @@ export default function ChatPage() {
         .finally(() => {
           if (!cancelled) setLoading(false)
         })
+
       return () => {
         cancelled = true
       }
     }
+
     if (!sessionId && messages.length === 0) {
       startChat()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [layoutReady])
 
   const persistSession = (id: string) => {
@@ -161,6 +206,7 @@ export default function ChatPage() {
                 role: (m.role === "user" ? "user" : "bot") as "user" | "bot",
                 text_en: m.text_en ?? m.text,
                 text_sv: m.text_sv ?? m.text,
+                faq_video_url: null,
               }))
             )
           }
@@ -185,11 +231,11 @@ export default function ChatPage() {
         language: lang,
       }),
     })
-    if (!res.ok)
+    if (!res.ok) {
       throw new Error(res.status === 500 ? "Server error" : "Failed to start chat")
+    }
     const data = await res.json()
-    if (!langOverride && data.language && data.language !== language)
-      setLang(data.language)
+    if (!langOverride && data.language && data.language !== language) setLang(data.language)
     return data
   }
 
@@ -199,37 +245,48 @@ export default function ChatPage() {
     try {
       const data = await fetchChat(sessionId || undefined)
       persistSession(data.session_id)
+
       if (data.history && data.history.length > 0) {
         setMessages(
           data.history.map((m) => ({
             role: "bot" as const,
             text: m.text,
+            faq_video_url: null,
           }))
         )
       } else {
-        const newBotMessages = (data.messages || []).map((text) => ({
+        const msgs = data.messages || []
+        const newBotMessages: ChatMessage[] = msgs.map((text, idx) => ({
           role: "bot" as const,
           text,
+          faq_video_url: idx === msgs.length - 1 ? data.faq_video_url ?? null : null,
         }))
         setMessages((prev) => [...prev, ...newBotMessages])
       }
     } catch {
       setMessages((prev) => [
         ...prev,
-        { role: "bot", text: t(language, "errorConnect") },
+        { role: "bot", text: t(language, "errorConnect"), faq_video_url: null },
       ])
     } finally {
       setLoading(false)
     }
   }
 
-  const sendMessage = async (e?: FormEvent) => {
+  const sendMessage = async (e?: FormEvent, overrideText?: string) => {
     e?.preventDefault()
-    const text = input.trim()
+    const text = (overrideText ?? input).trim()
     if (!text || loading) return
-    setInput("")
-    setMessages((prev) => [...prev, { role: "user", text }])
+
+    if (!overrideText) {
+      setInput("")
+    } else {
+      setInput("")
+    }
+
+    setMessages((prev) => [...prev, { role: "user", text, faq_video_url: null }])
     setLoading(true)
+
     try {
       const res = await fetch(`${API_BASE}/api/chat`, {
         method: "POST",
@@ -241,22 +298,33 @@ export default function ChatPage() {
         }),
       })
       if (!res.ok) throw new Error("Request failed")
-      const data = await res.json()
+
+      const data: ChatResponse = await res.json()
       if (data.session_id) persistSession(data.session_id)
       if (data.language && data.language !== language) setLang(data.language)
-      const newBotMessages = (data.messages || []).map((msg: string) => ({
+
+      const msgs = data.messages || []
+      const newBotMessages: ChatMessage[] = msgs.map((msg, idx) => ({
         role: "bot" as const,
         text: msg,
+        faq_video_url: idx === msgs.length - 1 ? data.faq_video_url ?? null : null,
       }))
       setMessages((prev) => [...prev, ...newBotMessages])
     } catch {
       setMessages((prev) => [
         ...prev,
-        { role: "bot", text: t(language, "errorRetry") },
+        { role: "bot", text: t(language, "errorRetry"), faq_video_url: null },
       ])
     } finally {
       setLoading(false)
     }
+
+    inputRef.current?.focus()
+  }
+
+  const handleDetectedCode = (code: string) => {
+    setScannerOpen(false)
+    setInput(code)
     inputRef.current?.focus()
   }
 
@@ -293,6 +361,38 @@ export default function ChatPage() {
     })
   }
 
+  const renderVideo = (url: string) => {
+    const embed = getYouTubeEmbed(url)
+    if (embed) {
+      return (
+        <iframe
+          className="aspect-video w-full rounded-xl"
+          src={embed}
+          title="Video"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen
+        />
+      )
+    }
+
+    return (
+      <div className="w-full rounded-xl overflow-hidden border border-white/10">
+        <VideoPlayer>
+          <VideoPlayerContent slot="media" src={url} playsInline />
+          <VideoPlayerControlBar>
+            <VideoPlayerPlayButton />
+            <VideoPlayerSeekBackwardButton />
+            <VideoPlayerSeekForwardButton />
+            <VideoPlayerTimeRange />
+            <VideoPlayerTimeDisplay />
+            <VideoPlayerMuteButton />
+            <VideoPlayerVolumeRange />
+          </VideoPlayerControlBar>
+        </VideoPlayer>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-lefitness-bg text-lefitness-text flex flex-col">
       <header className="header-outer sticky top-0 z-20 flex-shrink-0 bg-lefitness-header header-sticky-bg opacity-85">
@@ -306,11 +406,9 @@ export default function ChatPage() {
             <img src="/logo.svg" alt="LE Fitness" className="h-9 w-9 object-contain" />
             <span className="text-base font-semibold tracking-tight">LE Fitness</span>
           </a>
+
           <div className="flex items-center gap-3">
-            <div
-              ref={langDropdownRef}
-              className="lang-dropdown relative self-stretch flex items-center"
-            >
+            <div ref={langDropdownRef} className="lang-dropdown relative self-stretch flex items-center">
               <button
                 type="button"
                 onClick={() => setLangDropdownOpen((o) => !o)}
@@ -347,45 +445,44 @@ export default function ChatPage() {
         {!layoutReady && (
           <div className="flex-1 flex flex-col items-center justify-center py-12">
             <div className="spinner" />
-            <p className="mt-4 text-lefitness-muted text-sm">
-              {t(language, "connecting")}
-            </p>
+            <p className="mt-4 text-lefitness-muted text-sm">{t(language, "connecting")}</p>
           </div>
         )}
 
         {layoutReady && (
           <>
-            <div
-              ref={scrollContainerRef}
-              className="flex-1 overflow-y-auto px-5 pt-5 pb-3 min-h-0 pb-24"
-            >
+            <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-5 pt-5 pb-3 min-h-0 pb-24">
               <div className="space-y-6 pb-4">
-                {messages.map((msg, i) => (
-                  <div
-                    key={i}
-                    className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-                  >
+                {messages.map((msg, i) => {
+                  const body =
+                    msg.text ??
+                    (language === "sv"
+                      ? msg.text_sv ?? msg.text_en ?? ""
+                      : msg.text_en ?? msg.text_sv ?? "")
+
+                  return (
                     <div
-                      className={`max-w-[85%] px-5 py-3 text-lefitness-text ${
-                        msg.role === "user" ? "rounded-full" : ""
-                      }`}
-                      style={
-                        msg.role === "user"
-                          ? { backgroundColor: "#303030" }
-                          : undefined
-                      }
+                      key={i}
+                      className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
                     >
-                      <div className="text-sm whitespace-pre-wrap break-words leading-[1.15]">
-                        {formatMessage(
-                          msg.text ??
-                            (language === "sv"
-                              ? (msg.text_sv ?? msg.text_en ?? "")
-                              : (msg.text_en ?? msg.text_sv ?? ""))
-                        )}
+                      <div className="max-w-[85%]">
+                        <div
+                          className={`px-5 py-3 text-lefitness-text ${msg.role === "user" ? "rounded-full" : ""}`}
+                          style={msg.role === "user" ? { backgroundColor: "#303030" } : undefined}
+                        >
+                          <div className="text-sm whitespace-pre-wrap break-words leading-[1.15]">
+                            {formatMessage(body)}
+                          </div>
+                        </div>
+
+                        {msg.role === "bot" && msg.faq_video_url ? (
+                          <div className="mt-3">{renderVideo(msg.faq_video_url)}</div>
+                        ) : null}
                       </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
+
                 {loading && (
                   <div className="flex justify-start">
                     <div className="px-4 py-3 flex items-center gap-1.5 min-w-[52px] justify-center">
@@ -405,15 +502,9 @@ export default function ChatPage() {
       {layoutReady && (
         <div className="sticky bottom-0 z-10 flex-shrink-0 w-full mt-auto bg-lefitness-bg pt-2">
           <div className="max-w-2xl mx-auto px-4">
-            <div
-              className="rounded-full py-0.5 mb-3 w-full pr-0.5 pl-2"
-              style={{ backgroundColor: "#303030" }}
-            >
+            <div className="rounded-full py-0.5 mb-3 w-full pr-0.5 pl-2" style={{ backgroundColor: "#303030" }}>
               <form onSubmit={sendMessage}>
-                <div
-                  className="flex overflow-hidden rounded-full"
-                  style={{ backgroundColor: "#303030" }}
-                >
+                <div className="flex overflow-hidden rounded-full" style={{ backgroundColor: "#303030" }}>
                   <input
                     ref={inputRef}
                     type="text"
@@ -424,6 +515,33 @@ export default function ChatPage() {
                     disabled={loading}
                     className="flex-1 min-w-0 bg-transparent px-1.5 py-0.5 text-sm text-lefitness-text placeholder-lefitness-muted focus:outline-none focus:ring-0 border-0 rounded-none disabled:opacity-60"
                   />
+
+                  <button
+                    type="button"
+                    onClick={() => setScannerOpen(true)}
+                    disabled={loading}
+                    aria-label="Open scanner"
+                    className="m-1 w-9 h-9 rounded-full bg-[#4a4a4a] text-white flex items-center justify-center hover:bg-[#5a5a5a] disabled:opacity-50 flex-shrink-0"
+                  >
+                    <svg
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M4 7V6a2 2 0 0 1 2-2h1" />
+                      <path d="M20 7V6a2 2 0 0 0-2-2h-1" />
+                      <path d="M4 17v1a2 2 0 0 0 2 2h1" />
+                      <path d="M20 17v1a2 2 0 0 1-2 2h-1" />
+                      <path d="M7 12h10" />
+                    </svg>
+                  </button>
+
                   <button
                     type="submit"
                     disabled={loading || !input.trim()}
@@ -449,6 +567,7 @@ export default function ChatPage() {
               </form>
             </div>
           </div>
+
           <footer className="w-full bg-lefitness-header py-2.5">
             <div className="max-w-2xl mx-auto px-4 text-center text-lefitness-muted text-xs">
               <a
@@ -463,6 +582,12 @@ export default function ChatPage() {
           </footer>
         </div>
       )}
+
+      <BarcodeScanner
+        opened={scannerOpen}
+        onClose={() => setScannerOpen(false)}
+        onDetected={handleDetectedCode}
+      />
     </div>
   )
 }
