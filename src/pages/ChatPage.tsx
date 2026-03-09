@@ -14,7 +14,7 @@ import {
 import BarcodeScanner from "@/components/ui/BarcodeScanner"
 
 const API_BASE = import.meta.env.VITE_API_URL || ""
-
+console.log("API_BASE =", API_BASE)
 const LANGUAGES = [
   { value: "en", label: "English" },
   { value: "sv", label: "Swedish" },
