@@ -1,26 +1,39 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useState, FormEvent } from "react"
+import { Link } from "react-router-dom"
 
-const API_BASE = import.meta.env.VITE_API_URL || ''
+const API_BASE = import.meta.env.VITE_API_URL || ""
 
-function FaqAddPage() {
-  const [singleQuestion, setSingleQuestion] = useState('')
-  const [singleAnswer, setSingleAnswer] = useState('')
-  const [singleVideoLink, setSingleVideoLink] = useState('')
+interface ImportItem {
+  question: string
+  answer: string
+  video_link?: string | null
+}
+
+interface ImportResponse {
+  imported: number
+  reindexed: boolean
+  reindex_count: number
+  reindex_error?: string | null
+}
+
+export default function FaqAddPage() {
+  const [singleQuestion, setSingleQuestion] = useState("")
+  const [singleAnswer, setSingleAnswer] = useState("")
+  const [singleVideoLink, setSingleVideoLink] = useState("")
   const [singleLoading, setSingleLoading] = useState(false)
 
-  const [jsonText, setJsonText] = useState('')
+  const [jsonText, setJsonText] = useState("")
   const [jsonLoading, setJsonLoading] = useState(false)
 
-  const [message, setMessage] = useState('')
-  const [error, setError] = useState('')
+  const [message, setMessage] = useState("")
+  const [error, setError] = useState("")
 
   const resetStatus = () => {
-    setMessage('')
-    setError('')
+    setMessage("")
+    setError("")
   }
 
-  const handleCreateOne = async (e) => {
+  const handleCreateOne = async (e: FormEvent) => {
     e.preventDefault()
     resetStatus()
     const q = singleQuestion.trim()
@@ -29,8 +42,8 @@ function FaqAddPage() {
     setSingleLoading(true)
     try {
       const res = await fetch(`${API_BASE}/api/faq`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           question: q,
           answer: a,
@@ -39,63 +52,63 @@ function FaqAddPage() {
       })
       if (!res.ok) {
         const text = await res.text()
-        throw new Error(text || 'Failed to create FAQ')
+        throw new Error(text || "Failed to create FAQ")
       }
       const data = await res.json()
       setMessage(`Saved FAQ #${data.id}.`)
-      setSingleQuestion('')
-      setSingleAnswer('')
-      setSingleVideoLink('')
+      setSingleQuestion("")
+      setSingleAnswer("")
+      setSingleVideoLink("")
     } catch (err) {
-      setError(err.message || 'Failed to create FAQ')
+      setError(err instanceof Error ? err.message : "Failed to create FAQ")
     } finally {
       setSingleLoading(false)
     }
   }
 
-  const handleImportJson = async (e) => {
+  const handleImportJson = async (e: FormEvent) => {
     e.preventDefault()
     resetStatus()
     const raw = jsonText.trim()
     if (!raw || jsonLoading) return
-    let parsed
+    let parsed: ImportItem[]
     try {
       parsed = JSON.parse(raw)
       if (!Array.isArray(parsed)) {
-        throw new Error('JSON must be an array of objects')
+        throw new Error("JSON must be an array of objects")
       }
       if (parsed.length > 500) {
-        setError('Too many items: max 500')
+        setError("Too many items: max 500")
         return
       }
     } catch (err) {
-      setError(err.message || 'Invalid JSON')
+      setError(err instanceof Error ? err.message : "Invalid JSON")
       return
     }
     setJsonLoading(true)
     try {
       const res = await fetch(`${API_BASE}/api/faq/import?reindex=true`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(parsed),
       })
       if (!res.ok) {
-        let msg = 'Failed to import FAQs'
+        let msg = "Failed to import FAQs"
         try {
           const data = await res.json()
-          msg = data.detail || msg
+          msg = data.detail ?? msg
         } catch {
           const text = await res.text()
           if (text) msg = text
         }
-        throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg))
+        throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg))
       }
-      const data = await res.json()
+      const data: ImportResponse = await res.json()
       setMessage(
-        `Imported ${data.imported} FAQ(s). Reindexed: ${data.reindexed ? 'yes' : 'no'} (count: ${data.reindex_count}).`
+        `Imported ${data.imported} FAQ(s). Reindexed: ${data.reindexed ? "yes" : "no"} (count: ${data.reindex_count}).`
       )
     } catch (err) {
-      setError(err.message || 'Failed to import FAQs')
+      setError(err instanceof Error ? err.message : "Failed to import FAQs")
     } finally {
       setJsonLoading(false)
     }
@@ -123,7 +136,17 @@ function FaqAddPage() {
           to="/faq-admin"
           className="inline-flex items-center gap-2 text-sm text-lefitness-muted hover:text-lefitness-text no-underline mb-6 w-fit"
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
             <path d="M19 12H5" />
             <path d="M12 19l-7-7 7-7" />
           </svg>
@@ -133,8 +156,9 @@ function FaqAddPage() {
         <section className="mb-8">
           <h1 className="text-lg font-semibold mb-3">Import FAQs (JSON)</h1>
           <p className="text-sm text-lefitness-muted mb-3">
-            Paste a JSON array of FAQs with fields <code>question</code>, <code>answer</code>, and optional{' '}
-            <code>video_link</code>. This will also reindex.
+            Paste a JSON array of FAQs with fields <code>question</code>,{" "}
+            <code>answer</code>, and optional <code>video_link</code>. This will
+            also reindex.
           </p>
           <form onSubmit={handleImportJson} className="space-y-3">
             <textarea
@@ -149,7 +173,7 @@ function FaqAddPage() {
                 disabled={jsonLoading}
                 className="inline-flex items-center px-4 py-2 rounded-md text-sm bg-[#ffffff] text-black hover:bg-[#e5e5e5] disabled:opacity-60"
               >
-                {jsonLoading ? 'Importing...' : 'Import and reindex'}
+                {jsonLoading ? "Importing..." : "Import and reindex"}
               </button>
             </div>
           </form>
@@ -189,7 +213,7 @@ function FaqAddPage() {
                 disabled={singleLoading}
                 className="inline-flex items-center px-4 py-2 rounded-md text-sm bg-[#ffffff] text-black hover:bg-[#e5e5e5] disabled:opacity-60"
               >
-                {singleLoading ? 'Saving...' : 'Save FAQ'}
+                {singleLoading ? "Saving..." : "Save FAQ"}
               </button>
             </div>
           </form>
@@ -198,12 +222,14 @@ function FaqAddPage() {
         {(message || error) && (
           <div className="mt-4 text-sm">
             {message && <p className="text-green-400">{message}</p>}
-            {error && <p className="text-red-400 whitespace-pre-wrap break-words">{error}</p>}
+            {error && (
+              <p className="text-red-400 whitespace-pre-wrap break-words">
+                {error}
+              </p>
+            )}
           </div>
         )}
       </main>
     </div>
   )
 }
-
-export default FaqAddPage

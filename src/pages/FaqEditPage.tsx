@@ -1,61 +1,63 @@
-import { useState, useEffect } from 'react'
-import { Link, useParams, useNavigate } from 'react-router-dom'
+import { useState, useEffect, FormEvent } from "react"
+import { Link, useParams, useNavigate } from "react-router-dom"
 
-const API_BASE = import.meta.env.VITE_API_URL || ''
+const API_BASE = import.meta.env.VITE_API_URL || ""
 
-function FaqEditPage() {
-  const { id } = useParams()
+export default function FaqEditPage() {
+  const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const [question, setQuestion] = useState('')
-  const [answer, setAnswer] = useState('')
-  const [videoLink, setVideoLink] = useState('')
+  const [question, setQuestion] = useState("")
+  const [answer, setAnswer] = useState("")
+  const [videoLink, setVideoLink] = useState("")
   const [loading, setLoading] = useState(false)
-  const [fetchError, setFetchError] = useState('')
-  const [message, setMessage] = useState('')
-  const [error, setError] = useState('')
+  const [fetchError, setFetchError] = useState("")
+  const [message, setMessage] = useState("")
+  const [error, setError] = useState("")
 
   useEffect(() => {
     const numId = id ? parseInt(id, 10) : NaN
     if (!id || Number.isNaN(numId) || numId < 1) {
-      setFetchError('Invalid FAQ id')
+      setFetchError("Invalid FAQ id")
       return
     }
     let cancelled = false
     fetch(`${API_BASE}/api/faq/${id}`)
       .then((res) => {
-        if (!res.ok) throw new Error('FAQ not found')
+        if (!res.ok) throw new Error("FAQ not found")
         return res.json()
       })
-      .then((data) => {
+      .then((data: { question?: string; answer?: string; video_link?: string | null }) => {
         if (!cancelled) {
-          setQuestion(data.question || '')
-          setAnswer(data.answer || '')
-          setVideoLink(data.video_link || '')
+          setQuestion(data.question || "")
+          setAnswer(data.answer || "")
+          setVideoLink(data.video_link || "")
         }
       })
-      .catch((err) => {
-        if (!cancelled) setFetchError(err.message || 'Failed to load')
+      .catch((err: Error) => {
+        if (!cancelled) setFetchError(err.message || "Failed to load")
       })
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+    }
   }, [id])
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
-    setMessage('')
-    setError('')
+    setMessage("")
+    setError("")
     const q = question.trim()
     const a = answer.trim()
     if (!q || !a || loading) return
     const numId = id ? parseInt(id, 10) : NaN
     if (Number.isNaN(numId) || numId < 1) {
-      setError('Invalid FAQ id')
+      setError("Invalid FAQ id")
       return
     }
     setLoading(true)
     try {
       const res = await fetch(`${API_BASE}/api/faq/${numId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           question: q,
           answer: a,
@@ -64,12 +66,12 @@ function FaqEditPage() {
       })
       if (!res.ok) {
         const text = await res.text()
-        throw new Error(text || 'Failed to update')
+        throw new Error(text || "Failed to update")
       }
-      setMessage('Saved.')
-      setTimeout(() => navigate('/faq-admin'), 800)
+      setMessage("Saved.")
+      setTimeout(() => navigate("/faq-admin"), 800)
     } catch (err) {
-      setError(err.message || 'Failed to update')
+      setError(err instanceof Error ? err.message : "Failed to update")
     } finally {
       setLoading(false)
     }
@@ -97,7 +99,17 @@ function FaqEditPage() {
           to="/faq-admin"
           className="inline-flex items-center gap-2 text-sm text-lefitness-muted hover:text-lefitness-text no-underline mb-6 w-fit"
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
             <path d="M19 12H5" />
             <path d="M12 19l-7-7 7-7" />
           </svg>
@@ -143,7 +155,7 @@ function FaqEditPage() {
                 disabled={loading}
                 className="inline-flex items-center px-4 py-2 rounded-md text-sm bg-[#ffffff] text-black hover:bg-[#e5e5e5] disabled:opacity-60"
               >
-                {loading ? 'Saving...' : 'Save'}
+                {loading ? "Saving..." : "Save"}
               </button>
             </div>
           </form>
@@ -152,12 +164,14 @@ function FaqEditPage() {
         {(message || error) && (
           <div className="mt-4 text-sm">
             {message && <p className="text-green-400">{message}</p>}
-            {error && <p className="text-red-400 whitespace-pre-wrap break-words">{error}</p>}
+            {error && (
+              <p className="text-red-400 whitespace-pre-wrap break-words">
+                {error}
+              </p>
+            )}
           </div>
         )}
       </main>
     </div>
   )
 }
-
-export default FaqEditPage
