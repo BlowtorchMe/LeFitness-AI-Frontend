@@ -1,16 +1,4 @@
 import { useState, useRef, useEffect, FormEvent, KeyboardEvent } from "react"
-import {
-  VideoPlayer,
-  VideoPlayerControlBar,
-  VideoPlayerContent,
-  VideoPlayerPlayButton,
-  VideoPlayerTimeRange,
-  VideoPlayerTimeDisplay,
-  VideoPlayerMuteButton,
-  VideoPlayerVolumeRange,
-  VideoPlayerSeekBackwardButton,
-  VideoPlayerSeekForwardButton,
-} from "@/components/ui/video-player"
 import BarcodeScanner from "@/components/ui/BarcodeScanner"
 
 const API_BASE = import.meta.env.VITE_API_URL || ""
@@ -369,36 +357,28 @@ export default function ChatPage() {
 
     if (embed) {
       return (
-        <iframe
-          className="aspect-video w-full max-w-[420px] rounded-xl"
-          src={embed}
-          title="Video"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-          allowFullScreen
-        />
+        <div className="w-full max-w-[420px] aspect-video rounded-xl overflow-hidden border border-white/10 bg-black">
+          <iframe
+            className="w-full h-full"
+            src={embed}
+            title="Video"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+          />
+        </div>
       )
     }
 
     return (
-      <div className="w-full max-w-[420px] aspect-video rounded-xl overflow-hidden border border-white/10">
-        <VideoPlayer style={{ width: "100%" }}>
-          <VideoPlayerContent
-            slot="media"
-            src={url}
-            playsInline
-            preload="metadata"
-            crossOrigin="anonymous"
-          />
-          <VideoPlayerControlBar>
-            <VideoPlayerPlayButton />
-            <VideoPlayerSeekBackwardButton />
-            <VideoPlayerSeekForwardButton />
-            <VideoPlayerTimeRange />
-            <VideoPlayerTimeDisplay />
-            <VideoPlayerMuteButton />
-            <VideoPlayerVolumeRange />
-          </VideoPlayerControlBar>
-        </VideoPlayer>
+      <div className="w-full max-w-[420px] h-[260px] rounded-xl overflow-hidden border border-white/10 bg-black flex items-center justify-center">
+        <video
+          controls
+          playsInline
+          preload="metadata"
+          crossOrigin="anonymous"
+          className="max-w-full max-h-full object-contain bg-black"
+          src={url}
+        />
       </div>
     )
   }
