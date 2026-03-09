@@ -15,6 +15,7 @@ import BarcodeScanner from "@/components/ui/BarcodeScanner"
 
 const API_BASE = import.meta.env.VITE_API_URL || ""
 console.log("API_BASE =", API_BASE)
+
 const LANGUAGES = [
   { value: "en", label: "English" },
   { value: "sv", label: "Swedish" },
@@ -87,6 +88,7 @@ export default function ChatPage() {
       return ""
     }
   })
+
   const [language, setLanguage] = useState<string>(() => {
     try {
       return localStorage.getItem("lefitness_lang") || "en"
@@ -94,6 +96,7 @@ export default function ChatPage() {
       return "en"
     }
   })
+
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState("")
   const [loading, setLoading] = useState(false)
@@ -118,6 +121,7 @@ export default function ChatPage() {
 
   useEffect(() => {
     if (!langDropdownOpen) return
+
     const onOutside = (e: MouseEvent) => {
       if (
         langDropdownRef.current &&
@@ -126,6 +130,7 @@ export default function ChatPage() {
         setLangDropdownOpen(false)
       }
     }
+
     document.addEventListener("mousedown", onOutside)
     return () => document.removeEventListener("mousedown", onOutside)
   }, [langDropdownOpen])
@@ -139,10 +144,10 @@ export default function ChatPage() {
       setPendingMachine(machine)
       machineSentRef.current = false
 
-      // Viktigt: börja på ren session när man kommer från QR
       try {
         localStorage.removeItem("lefitness_chat_session")
       } catch {}
+
       setSessionId("")
 
       const cleanUrl = window.location.pathname
@@ -185,6 +190,7 @@ export default function ChatPage() {
 
   const handleLanguageChange = (newLang: string) => {
     setLang(newLang)
+
     if (sessionId) {
       setLoading(true)
       fetchChat(sessionId, undefined, newLang, false)
@@ -233,7 +239,11 @@ export default function ChatPage() {
     }
 
     const data = await res.json()
-    if (!langOverride && data.language && data.language !== language) setLang(data.language)
+
+    if (!langOverride && data.language && data.language !== language) {
+      setLang(data.language)
+    }
+
     return data
   }
 
@@ -376,6 +386,8 @@ export default function ChatPage() {
             slot="media"
             src={url}
             playsInline
+            preload="metadata"
+            crossOrigin="anonymous"
           />
           <VideoPlayerControlBar>
             <VideoPlayerPlayButton />
@@ -416,6 +428,7 @@ export default function ChatPage() {
               >
                 {LANGUAGES.find((o) => o.value === language)?.label ?? "English"}
               </button>
+
               {langDropdownOpen && (
                 <div className="lang-dropdown-panel">
                   {LANGUAGES.map((opt) => (
@@ -434,6 +447,7 @@ export default function ChatPage() {
                 </div>
               )}
             </div>
+
             <span className="text-lefitness-text text-sm">{t(language, "chat")}</span>
           </div>
         </div>
