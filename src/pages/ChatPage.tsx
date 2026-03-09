@@ -99,11 +99,13 @@ export default function ChatPage() {
   const [loading, setLoading] = useState(false)
   const [layoutReady, setLayoutReady] = useState(false)
   const [scannerOpen, setScannerOpen] = useState(false)
+  const [pendingMachine, setPendingMachine] = useState<string | null>(null)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const langDropdownRef = useRef<HTMLDivElement>(null)
+  const machineSentRef = useRef(false)
   const [langDropdownOpen, setLangDropdownOpen] = useState(false)
 
   const scrollToBottom = () => {
@@ -129,56 +131,43 @@ export default function ChatPage() {
   }, [langDropdownOpen])
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const machine = params.get("machine")?.trim() || null
+
+    if (machine) {
+      console.log("QR machine found in URL:", machine)
+      setPendingMachine(machine)
+      machineSentRef.current = false
+
+      // Viktigt: börja på ren session när man kommer från QR
+      try {
+        localStorage.removeItem("lefitness_chat_session")
+      } catch {}
+      setSessionId("")
+
+      const cleanUrl = window.location.pathname
+      window.history.replaceState({}, "", cleanUrl)
+    }
+
     setLayoutReady(true)
   }, [])
 
   useEffect(() => {
     if (!layoutReady) return
+    if (messages.length > 0) return
+    void startChat()
+  }, [layoutReady, messages.length])
 
-    if (sessionId && messages.length === 0) {
-      let cancelled = false
-      setLoading(true)
-      fetchChat(sessionId)
-        .then((data) => {
-          if (cancelled) return
-          persistSession(data.session_id)
+  useEffect(() => {
+    if (!pendingMachine) return
+    if (machineSentRef.current) return
+    if (messages.length === 0) return
+    if (loading) return
 
-          if (data.history && data.history.length > 0) {
-            if (data.language && data.language !== language) setLang(data.language)
-            setMessages(
-              data.history.map((m) => ({
-                role: (m.role === "user" ? "user" : "bot") as "user" | "bot",
-                text_en: m.text_en ?? m.text,
-                text_sv: m.text_sv ?? m.text,
-                faq_video_url: null,
-              }))
-            )
-          } else if (data.messages && data.messages.length > 0) {
-            setMessages(
-              data.messages.map((text, idx) => ({
-                role: "bot" as const,
-                text,
-                faq_video_url:
-                  idx === data.messages!.length - 1 ? data.faq_video_url ?? null : null,
-              }))
-            )
-          }
-        })
-        .catch(() => {})
-        .finally(() => {
-          if (!cancelled) setLoading(false)
-        })
-
-      return () => {
-        cancelled = true
-      }
-    }
-
-    if (!sessionId && messages.length === 0) {
-      startChat()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [layoutReady])
+    console.log("QR auto-send starting for machine:", pendingMachine)
+    machineSentRef.current = true
+    void sendMessage(undefined, pendingMachine, true)
+  }, [messages.length, pendingMachine, loading])
 
   const persistSession = (id: string) => {
     setSessionId(id)
@@ -198,7 +187,7 @@ export default function ChatPage() {
     setLang(newLang)
     if (sessionId) {
       setLoading(true)
-      fetchChat(sessionId, undefined, newLang)
+      fetchChat(sessionId, undefined, newLang, false)
         .then((data) => {
           if (data.history && data.history.length > 0) {
             setMessages(
@@ -219,21 +208,30 @@ export default function ChatPage() {
   const fetchChat = async (
     sid: string | undefined,
     message?: string,
-    langOverride?: string
+    langOverride?: string,
+    machineEntry?: boolean
   ): Promise<ChatResponse> => {
     const lang = langOverride ?? language
+
+    const payload = {
+      session_id: sid || undefined,
+      message,
+      language: lang,
+      machine_entry: machineEntry ?? false,
+    }
+
+    console.log("Sending chat payload:", payload)
+
     const res = await fetch(`${API_BASE}/api/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        session_id: sid || undefined,
-        message,
-        language: lang,
-      }),
+      body: JSON.stringify(payload),
     })
+
     if (!res.ok) {
       throw new Error(res.status === 500 ? "Server error" : "Failed to start chat")
     }
+
     const data = await res.json()
     if (!langOverride && data.language && data.language !== language) setLang(data.language)
     return data
@@ -242,15 +240,17 @@ export default function ChatPage() {
   const startChat = async () => {
     if (loading) return
     setLoading(true)
+
     try {
-      const data = await fetchChat(sessionId || undefined)
+      const data = await fetchChat(sessionId || undefined, undefined, undefined, false)
       persistSession(data.session_id)
 
       if (data.history && data.history.length > 0) {
         setMessages(
           data.history.map((m) => ({
-            role: "bot" as const,
-            text: m.text,
+            role: (m.role === "user" ? "user" : "bot") as "user" | "bot",
+            text_en: m.text_en ?? m.text,
+            text_sv: m.text_sv ?? m.text,
             faq_video_url: null,
           }))
         )
@@ -273,33 +273,27 @@ export default function ChatPage() {
     }
   }
 
-  const sendMessage = async (e?: FormEvent, overrideText?: string) => {
+  const sendMessage = async (
+    e?: FormEvent,
+    overrideText?: string,
+    machineEntry?: boolean
+  ) => {
     e?.preventDefault()
     const text = (overrideText ?? input).trim()
     if (!text || loading) return
 
-    if (!overrideText) {
-      setInput("")
-    } else {
-      setInput("")
-    }
-
+    setInput("")
     setMessages((prev) => [...prev, { role: "user", text, faq_video_url: null }])
     setLoading(true)
 
     try {
-      const res = await fetch(`${API_BASE}/api/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          session_id: sessionId || undefined,
-          message: text,
-          language: language,
-        }),
-      })
-      if (!res.ok) throw new Error("Request failed")
+      const data = await fetchChat(
+        sessionId || undefined,
+        text,
+        undefined,
+        machineEntry ?? false
+      )
 
-      const data: ChatResponse = await res.json()
       if (data.session_id) persistSession(data.session_id)
       if (data.language && data.language !== language) setLang(data.language)
 
@@ -322,16 +316,15 @@ export default function ChatPage() {
     inputRef.current?.focus()
   }
 
-  const handleDetectedCode = (code: string) => {
+  const handleDetectedCode = async (code: string) => {
     setScannerOpen(false)
-    setInput(code)
-    inputRef.current?.focus()
+    await sendMessage(undefined, code, false)
   }
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
-      sendMessage()
+      void sendMessage()
     }
   }
 
@@ -363,10 +356,11 @@ export default function ChatPage() {
 
   const renderVideo = (url: string) => {
     const embed = getYouTubeEmbed(url)
+
     if (embed) {
       return (
         <iframe
-          className="aspect-video w-full rounded-xl"
+          className="aspect-video w-full max-w-[420px] rounded-xl"
           src={embed}
           title="Video"
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
@@ -376,9 +370,13 @@ export default function ChatPage() {
     }
 
     return (
-      <div className="w-full rounded-xl overflow-hidden border border-white/10">
-        <VideoPlayer>
-          <VideoPlayerContent slot="media" src={url} playsInline />
+      <div className="w-full max-w-[420px] aspect-video rounded-xl overflow-hidden border border-white/10">
+        <VideoPlayer style={{ width: "100%" }}>
+          <VideoPlayerContent
+            slot="media"
+            src={url}
+            playsInline
+          />
           <VideoPlayerControlBar>
             <VideoPlayerPlayButton />
             <VideoPlayerSeekBackwardButton />
