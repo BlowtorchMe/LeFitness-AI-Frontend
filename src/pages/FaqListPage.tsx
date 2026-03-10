@@ -18,6 +18,7 @@ export default function FaqListPage() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null)
   const [reindexing, setReindexing] = useState(false)
   const [reindexMessage, setReindexMessage] = useState("")
+  const showReindexButton = false
 
   const totalPages = Math.max(1, Math.ceil(total / size))
 
@@ -199,34 +200,36 @@ export default function FaqListPage() {
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-lg font-semibold">Frequently Asked Questions</h1>
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              disabled={reindexing || total === 0}
-              onClick={async () => {
-                setReindexMessage("")
-                setReindexing(true)
-                try {
-                  const res = await fetch(`${API_BASE}/api/faq/reindex`, {
-                    method: "POST",
-                  })
-                  const data = await res.json().catch(() => ({}))
-                  if (res.ok && data.success) {
-                    setReindexMessage(`Reindexed ${data.count} FAQ(s).`)
-                  } else {
-                    setReindexMessage(data.error || "Reindex failed")
+            {showReindexButton && (
+              <button
+                type="button"
+                disabled={reindexing || total === 0}
+                onClick={async () => {
+                  setReindexMessage("")
+                  setReindexing(true)
+                  try {
+                    const res = await fetch(`${API_BASE}/api/faq/reindex`, {
+                      method: "POST",
+                    })
+                    const data = await res.json().catch(() => ({}))
+                    if (res.ok && data.success) {
+                      setReindexMessage(`Reindexed ${data.count} FAQ(s).`)
+                    } else {
+                      setReindexMessage(data.error || "Reindex failed")
+                    }
+                  } catch (e) {
+                    setReindexMessage(
+                      e instanceof Error ? e.message : "Reindex failed"
+                    )
+                  } finally {
+                    setReindexing(false)
                   }
-                } catch (e) {
-                  setReindexMessage(
-                    e instanceof Error ? e.message : "Reindex failed"
-                  )
-                } finally {
-                  setReindexing(false)
-                }
-              }}
-              className="inline-flex items-center px-4 py-2 rounded-md text-sm bg-[#2a2a2a] text-lefitness-text border border-[#303030] hover:bg-[#333] disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {reindexing ? "Reindexing..." : "Reindex"}
-            </button>
+                }}
+                className="inline-flex items-center px-4 py-2 rounded-md text-sm bg-[#2a2a2a] text-lefitness-text border border-[#303030] hover:bg-[#333] disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {reindexing ? "Reindexing..." : "Reindex"}
+              </button>
+            )}
             <Link
               to="/faq-admin/add"
               className="inline-flex items-center px-4 py-2 rounded-md text-sm bg-[#ffffff] text-black hover:bg-[#e5e5e5] no-underline"
@@ -235,7 +238,7 @@ export default function FaqListPage() {
             </Link>
           </div>
         </div>
-        {reindexMessage && (
+        {showReindexButton && reindexMessage && (
           <p
             className={`text-sm mb-4 ${reindexMessage.startsWith("Reindexed") ? "text-green-400" : "text-red-400"}`}
           >
