@@ -99,6 +99,11 @@ export default function ChatPage() {
 
   useEffect(() => {
     if (!layoutReady) return
+    inputRef.current?.focus()
+  }, [layoutReady, loading])
+
+  useEffect(() => {
+    if (!layoutReady) return
     if (sessionId && messages.length === 0) {
       let cancelled = false
       setLoading(true)
@@ -176,7 +181,7 @@ export default function ChatPage() {
     langOverride?: string
   ): Promise<ChatResponse> => {
     const lang = langOverride ?? language
-    const res = await fetch(`${API_BASE}/api/chat`, {
+    const res = await fetch(`${API_BASE}/api/chat/`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -230,8 +235,9 @@ export default function ChatPage() {
     setInput("")
     setMessages((prev) => [...prev, { role: "user", text }])
     setLoading(true)
+    requestAnimationFrame(() => inputRef.current?.focus())
     try {
-      const res = await fetch(`${API_BASE}/api/chat`, {
+      const res = await fetch(`${API_BASE}/api/chat/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -421,8 +427,7 @@ export default function ChatPage() {
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={handleKeyDown}
                     placeholder={t(language, "placeholder")}
-                    disabled={loading}
-                    className="flex-1 min-w-0 bg-transparent px-1.5 py-0.5 text-sm text-lefitness-text placeholder-lefitness-muted focus:outline-none focus:ring-0 border-0 rounded-none disabled:opacity-60"
+                    className="flex-1 min-w-0 bg-transparent px-1.5 py-0.5 text-sm text-lefitness-text placeholder-lefitness-muted focus:outline-none focus:ring-0 border-0 rounded-none"
                   />
                   <button
                     type="submit"
