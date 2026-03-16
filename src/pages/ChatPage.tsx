@@ -107,6 +107,12 @@ export default function ChatPage() {
     scrollToBottom()
   }, [messages])
 
+  // Restore focus to input after every message so user never needs to click the box
+  useEffect(() => {
+    if (loading) return
+    requestAnimationFrame(() => inputRef.current?.focus())
+  }, [loading])
+
   useEffect(() => {
     if (!langDropdownOpen) return
 
@@ -216,7 +222,7 @@ export default function ChatPage() {
 
     console.log("Sending chat payload:", payload)
 
-    const res = await fetch(`${API_BASE}/api/chat`, {
+    const res = await fetch(`${API_BASE}/api/chat/`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
