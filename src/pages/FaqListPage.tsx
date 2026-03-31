@@ -1,8 +1,10 @@
 import { useState, useEffect, ChangeEvent } from "react"
 import { Link } from "react-router-dom"
+import AdminHeader from "@/components/AdminHeader"
+import { adminFetch } from "@/lib/api"
 import type { FaqRecord } from "@/types/faq"
+import type { GymRecord } from "@/types/gym"
 
-const API_BASE = import.meta.env.VITE_API_URL || ""
 const PAGE_SIZES = [5, 10, 20, 50, 100]
 const DEFAULT_PAGE_SIZE = 10
 
@@ -18,6 +20,7 @@ export default function FaqListPage() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null)
   const [reindexing, setReindexing] = useState(false)
   const [reindexMessage, setReindexMessage] = useState("")
+  const [gyms, setGyms] = useState<GymRecord[]>([])
   const showReindexButton = false
 
   const totalPages = Math.max(1, Math.ceil(total / size))
@@ -25,7 +28,7 @@ export default function FaqListPage() {
   useEffect(() => {
     let cancelled = false
     setLoading(true)
-    fetch(`${API_BASE}/api/faq?page=${page}&size=${size}`)
+    adminFetch(`/api/faq?page=${page}&size=${size}`)
       .then((res) => {
         if (!res.ok) throw new Error("Failed to load FAQs")
         return res.json()
@@ -46,6 +49,22 @@ export default function FaqListPage() {
       cancelled = true
     }
   }, [page, size])
+
+  useEffect(() => {
+    let cancelled = false
+    adminFetch("/api/gyms")
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to load gyms")
+        return res.json()
+      })
+      .then((data: GymRecord[]) => {
+        if (!cancelled) setGyms(data)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const handleSizeChange = (e: ChangeEvent<HTMLSelectElement>) => {
     const newSize = Number(e.target.value)
@@ -79,7 +98,7 @@ export default function FaqListPage() {
     setDeletingId(faqId)
     setError("")
     try {
-      const res = await fetch(`${API_BASE}/api/faq/${faqId}`, { method: "DELETE" })
+      const res = await adminFetch(`/api/faq/${faqId}`, { method: "DELETE" })
       if (res.status === 404) {
         setItems((prev) => prev.filter((f) => f.id !== faqId))
         setTotal((t) => Math.max(0, t - 1))
@@ -137,6 +156,7 @@ export default function FaqListPage() {
 
   return (
     <div className="min-h-screen bg-lefitness-bg text-lefitness-text flex flex-col">
+      <AdminHeader />
       {deleteConfirmId != null && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
@@ -181,21 +201,6 @@ export default function FaqListPage() {
           </div>
         </div>
       )}
-      <header className="header-outer sticky top-0 z-20 flex-shrink-0 bg-lefitness-header header-sticky-bg opacity-85">
-        <div className="header-row max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
-          <a
-            href="https://lefitness.se"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-3 no-underline text-lefitness-text hover:opacity-90"
-          >
-            <img src="/logo.svg" alt="LE Fitness" className="h-9 w-9 object-contain" />
-            <span className="text-base font-semibold tracking-tight">LE Fitness</span>
-          </a>
-          <span className="text-lefitness-text text-sm">FAQ Admin</span>
-        </div>
-      </header>
-
       <main className="flex-1 flex flex-col max-w-2xl w-full mx-auto min-w-0 px-4 py-6">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-lg font-semibold">Frequently Asked Questions</h1>
@@ -208,7 +213,7 @@ export default function FaqListPage() {
                   setReindexMessage("")
                   setReindexing(true)
                   try {
-                    const res = await fetch(`${API_BASE}/api/faq/reindex`, {
+                    const res = await adminFetch(`/api/faq/reindex`, {
                       method: "POST",
                     })
                     const data = await res.json().catch(() => ({}))
@@ -231,7 +236,7 @@ export default function FaqListPage() {
               </button>
             )}
             <Link
-              to="/faq-admin/add"
+              to="/admin/faq/add"
               className="inline-flex items-center px-4 py-2 rounded-md text-sm bg-[#ffffff] text-black hover:bg-[#e5e5e5] no-underline"
             >
               Add
@@ -289,6 +294,18 @@ export default function FaqListPage() {
                   <p className="text-sm font-medium text-lefitness-text mb-1">
                     {faq.question}
                   </p>
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {(faq.gym_ids?.length
+                      ? gyms.filter((gym) => faq.gym_ids.includes(gym.id)).map((gym) => gym.name)
+                      : ["Global"]).map((label) => (
+                      <span
+                        key={label}
+                        className="text-xs px-2 py-0.5 rounded-full bg-[#2a2a2a] text-lefitness-muted"
+                      >
+                        {label}
+                      </span>
+                    ))}
+                  </div>
                   <p className="text-sm text-lefitness-muted whitespace-pre-wrap">
                     {faq.answer}
                   </p>
@@ -305,7 +322,7 @@ export default function FaqListPage() {
                   {hoverId === faq.id && (
                     <div className="absolute bottom-3 right-3 flex items-center gap-2">
                       <Link
-                        to={`/faq-admin/edit/${faq.id}`}
+                        to={`/admin/faq/edit/${faq.id}`}
                         className={`${iconBtn} bg-lefitness-muted text-lefitness-bg hover:bg-lefitness-text`}
                         aria-label="Edit"
                       >

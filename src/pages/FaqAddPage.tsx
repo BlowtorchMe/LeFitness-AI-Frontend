@@ -1,7 +1,9 @@
 import { useState, FormEvent } from "react"
 import { Link } from "react-router-dom"
-
-const API_BASE = import.meta.env.VITE_API_URL || ""
+import { useEffect } from "react"
+import AdminHeader from "@/components/AdminHeader"
+import { adminFetch } from "@/lib/api"
+import type { GymRecord } from "@/types/gym"
 
 interface ImportItem {
   question: string
@@ -24,9 +26,27 @@ export default function FaqAddPage() {
 
   const [jsonText, setJsonText] = useState("")
   const [jsonLoading, setJsonLoading] = useState(false)
+  const [gyms, setGyms] = useState<GymRecord[]>([])
+  const [singleGymIds, setSingleGymIds] = useState<number[]>([])
 
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
+
+  useEffect(() => {
+    let cancelled = false
+    adminFetch("/api/gyms")
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to load gyms")
+        return res.json()
+      })
+      .then((data: GymRecord[]) => {
+        if (!cancelled) setGyms(data)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const resetStatus = () => {
     setMessage("")
@@ -41,13 +61,14 @@ export default function FaqAddPage() {
     if (!q || !a || singleLoading) return
     setSingleLoading(true)
     try {
-      const res = await fetch(`${API_BASE}/api/faq`, {
+      const res = await adminFetch(`/api/faq`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           question: q,
           answer: a,
           video_link: singleVideoLink.trim() || null,
+          gym_ids: singleGymIds,
         }),
       })
       if (!res.ok) {
@@ -59,6 +80,7 @@ export default function FaqAddPage() {
       setSingleQuestion("")
       setSingleAnswer("")
       setSingleVideoLink("")
+      setSingleGymIds([])
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create FAQ")
     } finally {
@@ -87,7 +109,7 @@ export default function FaqAddPage() {
     }
     setJsonLoading(true)
     try {
-      const res = await fetch(`${API_BASE}/api/faq/import?reindex=true`, {
+      const res = await adminFetch(`/api/faq/import?reindex=true`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(parsed),
@@ -116,24 +138,11 @@ export default function FaqAddPage() {
 
   return (
     <div className="min-h-screen bg-lefitness-bg text-lefitness-text flex flex-col">
-      <header className="header-outer sticky top-0 z-20 flex-shrink-0 bg-lefitness-header header-sticky-bg opacity-85">
-        <div className="header-row max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
-          <a
-            href="https://lefitness.se"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-3 no-underline text-lefitness-text hover:opacity-90"
-          >
-            <img src="/logo.svg" alt="LE Fitness" className="h-9 w-9 object-contain" />
-            <span className="text-base font-semibold tracking-tight">LE Fitness</span>
-          </a>
-          <span className="text-lefitness-text text-sm">FAQ Admin</span>
-        </div>
-      </header>
+      <AdminHeader />
 
       <main className="flex-1 flex flex-col max-w-2xl w-full mx-auto min-w-0 px-4 py-6">
         <Link
-          to="/faq-admin"
+          to="/admin/faq"
           className="inline-flex items-center gap-2 text-sm text-lefitness-muted hover:text-lefitness-text no-underline mb-6 w-fit"
         >
           <svg
@@ -157,8 +166,8 @@ export default function FaqAddPage() {
           <h1 className="text-lg font-semibold mb-3">Import FAQs (JSON)</h1>
           <p className="text-sm text-lefitness-muted mb-3">
             Paste a JSON array of FAQs with fields <code>question</code>,{" "}
-            <code>answer</code>, and optional <code>video_link</code>. This will
-            also reindex.
+            <code>answer</code>, and optional <code>video_link</code>. Imported
+            FAQs are added as global FAQs and then reindexed.
           </p>
           <form onSubmit={handleImportJson} className="space-y-3">
             <textarea
@@ -206,6 +215,38 @@ export default function FaqAddPage() {
                 onChange={(e) => setSingleVideoLink(e.target.value)}
                 className="w-full rounded-md bg-lefitness-header text-lefitness-text text-sm p-2 border border-[#303030] focus:outline-none focus:ring-1 focus:ring-lefitness-muted"
               />
+            </div>
+            <div>
+              <label className="block text-sm mb-2">Gyms</label>
+              <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2 xl:grid-cols-4">
+                <label className="flex items-center gap-2 rounded-md border border-[#303030] bg-lefitness-header px-3 py-2 text-lefitness-muted">
+                  <input
+                    type="checkbox"
+                    checked={singleGymIds.length === 0}
+                    onChange={() => setSingleGymIds([])}
+                  />
+                  Global FAQ
+                </label>
+                {gyms.map((gym) => (
+                  <label
+                    key={gym.id}
+                    className="flex items-center gap-2 rounded-md border border-[#303030] bg-lefitness-header px-3 py-2 text-lefitness-muted"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={singleGymIds.includes(gym.id)}
+                      onChange={(e) =>
+                        setSingleGymIds((prev) =>
+                          e.target.checked
+                            ? [...prev, gym.id].filter((value, index, list) => list.indexOf(value) === index)
+                            : prev.filter((id) => id !== gym.id)
+                        )
+                      }
+                    />
+                    {gym.name}
+                  </label>
+                ))}
+              </div>
             </div>
             <div className="flex justify-end">
               <button

@@ -1,7 +1,8 @@
 import { useState, useEffect, FormEvent } from "react"
 import { Link, useParams, useNavigate } from "react-router-dom"
-
-const API_BASE = import.meta.env.VITE_API_URL || ""
+import AdminHeader from "@/components/AdminHeader"
+import { adminFetch } from "@/lib/api"
+import type { GymRecord } from "@/types/gym"
 
 export default function FaqEditPage() {
   const { id } = useParams<{ id: string }>()
@@ -13,6 +14,24 @@ export default function FaqEditPage() {
   const [fetchError, setFetchError] = useState("")
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
+  const [gyms, setGyms] = useState<GymRecord[]>([])
+  const [gymIds, setGymIds] = useState<number[]>([])
+
+  useEffect(() => {
+    let cancelled = false
+    adminFetch("/api/gyms")
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to load gyms")
+        return res.json()
+      })
+      .then((data: GymRecord[]) => {
+        if (!cancelled) setGyms(data)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     const numId = id ? parseInt(id, 10) : NaN
@@ -21,16 +40,17 @@ export default function FaqEditPage() {
       return
     }
     let cancelled = false
-    fetch(`${API_BASE}/api/faq/${id}`)
+    adminFetch(`/api/faq/${id}`)
       .then((res) => {
         if (!res.ok) throw new Error("FAQ not found")
         return res.json()
       })
-      .then((data: { question?: string; answer?: string; video_link?: string | null }) => {
+      .then((data: { question?: string; answer?: string; video_link?: string | null; gym_ids?: number[] }) => {
         if (!cancelled) {
           setQuestion(data.question || "")
           setAnswer(data.answer || "")
           setVideoLink(data.video_link || "")
+          setGymIds(data.gym_ids || [])
         }
       })
       .catch((err: Error) => {
@@ -55,13 +75,14 @@ export default function FaqEditPage() {
     }
     setLoading(true)
     try {
-      const res = await fetch(`${API_BASE}/api/faq/${numId}`, {
+      const res = await adminFetch(`/api/faq/${numId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           question: q,
           answer: a,
           video_link: videoLink.trim() || null,
+          gym_ids: gymIds,
         }),
       })
       if (!res.ok) {
@@ -69,7 +90,7 @@ export default function FaqEditPage() {
         throw new Error(text || "Failed to update")
       }
       setMessage("Saved.")
-      setTimeout(() => navigate("/faq-admin"), 800)
+      setTimeout(() => navigate("/admin/faq"), 800)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update")
     } finally {
@@ -79,24 +100,11 @@ export default function FaqEditPage() {
 
   return (
     <div className="min-h-screen bg-lefitness-bg text-lefitness-text flex flex-col">
-      <header className="header-outer sticky top-0 z-20 flex-shrink-0 bg-lefitness-header header-sticky-bg opacity-85">
-        <div className="header-row max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
-          <a
-            href="https://lefitness.se"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-3 no-underline text-lefitness-text hover:opacity-90"
-          >
-            <img src="/logo.svg" alt="LE Fitness" className="h-9 w-9 object-contain" />
-            <span className="text-base font-semibold tracking-tight">LE Fitness</span>
-          </a>
-          <span className="text-lefitness-text text-sm">FAQ Admin</span>
-        </div>
-      </header>
+      <AdminHeader />
 
       <main className="flex-1 flex flex-col max-w-2xl w-full mx-auto min-w-0 px-4 py-6">
         <Link
-          to="/faq-admin"
+          to="/admin/faq"
           className="inline-flex items-center gap-2 text-sm text-lefitness-muted hover:text-lefitness-text no-underline mb-6 w-fit"
         >
           <svg
@@ -148,6 +156,35 @@ export default function FaqEditPage() {
                 onChange={(e) => setVideoLink(e.target.value)}
                 className="w-full rounded-md bg-lefitness-header text-lefitness-text text-sm p-2 border border-[#303030] focus:outline-none focus:ring-1 focus:ring-lefitness-muted"
               />
+            </div>
+            <div>
+              <label className="block text-sm mb-2">Gyms</label>
+              <div className="space-y-2 text-sm">
+                <label className="flex items-center gap-2 text-lefitness-muted">
+                  <input
+                    type="checkbox"
+                    checked={gymIds.length === 0}
+                    onChange={() => setGymIds([])}
+                  />
+                  Global FAQ
+                </label>
+                {gyms.map((gym) => (
+                  <label key={gym.id} className="flex items-center gap-2 text-lefitness-muted">
+                    <input
+                      type="checkbox"
+                      checked={gymIds.includes(gym.id)}
+                      onChange={(e) =>
+                        setGymIds((prev) =>
+                          e.target.checked
+                            ? [...prev, gym.id].filter((value, index, list) => list.indexOf(value) === index)
+                            : prev.filter((id) => id !== gym.id)
+                        )
+                      }
+                    />
+                    {gym.name}
+                  </label>
+                ))}
+              </div>
             </div>
             <div className="flex justify-end">
               <button

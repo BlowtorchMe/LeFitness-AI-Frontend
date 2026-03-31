@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect, FormEvent, KeyboardEvent } from "react"
-
-const API_BASE = import.meta.env.VITE_API_URL || ""
+import { apiUrl } from "@/lib/api"
 
 const LANGUAGES = [
   { value: "en", label: "English" },
@@ -45,6 +44,9 @@ interface ChatResponse {
   messages?: string[]
   history?: { role: string; text?: string; text_en?: string; text_sv?: string }[]
   language?: string
+  options?: { id: string; label: string; action: string }[]
+  input_disabled?: boolean
+  selected_gym?: { id: number; name: string } | null
 }
 
 export default function ChatPage() {
@@ -63,6 +65,7 @@ export default function ChatPage() {
     }
   })
   const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [options, setOptions] = useState<ChatResponse["options"]>([])
   const [input, setInput] = useState("")
   const [loading, setLoading] = useState(false)
   const [layoutReady, setLayoutReady] = useState(false)
@@ -74,6 +77,32 @@ export default function ChatPage() {
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+  }
+
+  const applyResponse = (
+    data: ChatResponse,
+    mode: "append" | "history" = "append"
+  ) => {
+    if (data.session_id) persistSession(data.session_id)
+    if (data.language && data.language !== language) setLang(data.language)
+    setOptions(data.options || [])
+    if (mode === "history" && data.history && data.history.length > 0) {
+      setMessages(
+        data.history.map((m) => ({
+          role: (m.role === "user" ? "user" : "bot") as "user" | "bot",
+          text_en: m.text_en ?? m.text,
+          text_sv: m.text_sv ?? m.text,
+        }))
+      )
+      return
+    }
+    if (data.messages && data.messages.length > 0) {
+      const newBotMessages = data.messages.map((text) => ({
+        role: "bot" as const,
+        text,
+      }))
+      setMessages((prev) => [...prev, ...newBotMessages])
+    }
   }
 
   useEffect(() => {
@@ -110,22 +139,8 @@ export default function ChatPage() {
       fetchChat(sessionId)
         .then((data) => {
           if (cancelled) return
-          persistSession(data.session_id)
-          if (data.history && data.history.length > 0) {
-            if (data.language && data.language !== language)
-              setLang(data.language)
-            setMessages(
-              data.history.map((m) => ({
-                role: (m.role === "user" ? "user" : "bot") as "user" | "bot",
-                text_en: m.text_en ?? m.text,
-                text_sv: m.text_sv ?? m.text,
-              }))
-            )
-          } else if (data.messages && data.messages.length > 0) {
-            setMessages(
-              data.messages.map((text) => ({ role: "bot" as const, text }))
-            )
-          }
+          if (data.history && data.history.length > 0) applyResponse(data, "history")
+          else applyResponse(data)
         })
         .catch(() => {})
         .finally(() => {
@@ -160,15 +175,7 @@ export default function ChatPage() {
       setLoading(true)
       fetchChat(sessionId, undefined, newLang)
         .then((data) => {
-          if (data.history && data.history.length > 0) {
-            setMessages(
-              data.history.map((m) => ({
-                role: (m.role === "user" ? "user" : "bot") as "user" | "bot",
-                text_en: m.text_en ?? m.text,
-                text_sv: m.text_sv ?? m.text,
-              }))
-            )
-          }
+          if (data.history && data.history.length > 0) applyResponse(data, "history")
         })
         .catch(() => {})
         .finally(() => setLoading(false))
@@ -181,7 +188,7 @@ export default function ChatPage() {
     langOverride?: string
   ): Promise<ChatResponse> => {
     const lang = langOverride ?? language
-    const res = await fetch(`${API_BASE}/api/chat/`, {
+    const res = await fetch(apiUrl(`/api/chat/`), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -193,8 +200,6 @@ export default function ChatPage() {
     if (!res.ok)
       throw new Error(res.status === 500 ? "Server error" : "Failed to start chat")
     const data = await res.json()
-    if (!langOverride && data.language && data.language !== language)
-      setLang(data.language)
     return data
   }
 
@@ -203,21 +208,8 @@ export default function ChatPage() {
     setLoading(true)
     try {
       const data = await fetchChat(sessionId || undefined)
-      persistSession(data.session_id)
-      if (data.history && data.history.length > 0) {
-        setMessages(
-          data.history.map((m) => ({
-            role: "bot" as const,
-            text: m.text,
-          }))
-        )
-      } else {
-        const newBotMessages = (data.messages || []).map((text) => ({
-          role: "bot" as const,
-          text,
-        }))
-        setMessages((prev) => [...prev, ...newBotMessages])
-      }
+      if (data.history && data.history.length > 0) applyResponse(data, "history")
+      else applyResponse(data)
     } catch {
       setMessages((prev) => [
         ...prev,
@@ -234,10 +226,11 @@ export default function ChatPage() {
     if (!text || loading) return
     setInput("")
     setMessages((prev) => [...prev, { role: "user", text }])
+    setOptions([])
     setLoading(true)
     requestAnimationFrame(() => inputRef.current?.focus())
     try {
-      const res = await fetch(`${API_BASE}/api/chat/`, {
+      const res = await fetch(apiUrl(`/api/chat/`), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -248,13 +241,7 @@ export default function ChatPage() {
       })
       if (!res.ok) throw new Error("Request failed")
       const data = await res.json()
-      if (data.session_id) persistSession(data.session_id)
-      if (data.language && data.language !== language) setLang(data.language)
-      const newBotMessages = (data.messages || []).map((msg: string) => ({
-        role: "bot" as const,
-        text: msg,
-      }))
-      setMessages((prev) => [...prev, ...newBotMessages])
+      applyResponse(data)
     } catch {
       setMessages((prev) => [
         ...prev,
@@ -270,6 +257,36 @@ export default function ChatPage() {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
       sendMessage()
+    }
+  }
+
+  const handleOptionClick = async (option: { id: string; label: string; action: string }) => {
+    if (loading) return
+    setMessages((prev) => [...prev, { role: "user", text: option.label }])
+    setOptions([])
+    setLoading(true)
+    try {
+      const res = await fetch(apiUrl(`/api/chat/`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: sessionId || undefined,
+          language,
+          action: option.action,
+          action_value: option.id,
+          action_label: option.label,
+        }),
+      })
+      if (!res.ok) throw new Error("Request failed")
+      const data = await res.json()
+      applyResponse(data)
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        { role: "bot", text: t(language, "errorRetry") },
+      ])
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -401,6 +418,22 @@ export default function ChatPage() {
                     </div>
                   </div>
                 )}
+                {!loading && options && options.length > 0 && (
+                  <div className="flex justify-start">
+                    <div className="flex flex-wrap gap-2 max-w-[85%]">
+                      {options.map((option) => (
+                        <button
+                          key={`${option.action}:${option.id}`}
+                          type="button"
+                          onClick={() => handleOptionClick(option)}
+                          className="px-4 py-2 rounded-full border border-[#3a3a3a] bg-lefitness-header text-sm text-lefitness-text hover:bg-[#2a2a2a]"
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
               <div ref={messagesEndRef} />
             </div>
@@ -426,7 +459,8 @@ export default function ChatPage() {
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={handleKeyDown}
-                    placeholder={t(language, "placeholder")}
+                    placeholder={options && options.length > 0 ? "Select an option above" : t(language, "placeholder")}
+                    disabled={loading || !!(options && options.length > 0)}
                     className="flex-1 min-w-0 bg-transparent px-1.5 py-0.5 text-sm text-lefitness-text placeholder-lefitness-muted focus:outline-none focus:ring-0 border-0 rounded-none"
                   />
                   <button
