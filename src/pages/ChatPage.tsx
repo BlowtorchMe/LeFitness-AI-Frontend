@@ -128,8 +128,12 @@ export default function ChatPage() {
 
   useEffect(() => {
     if (!layoutReady) return
-    inputRef.current?.focus()
-  }, [layoutReady, loading])
+    // Fokusera inputfältet när loading är klar och inga options visas.
+    // setTimeout(0) ger React tid att rendera bort disabled-attributet först.
+    if (!loading && (!options || options.length === 0)) {
+      setTimeout(() => inputRef.current?.focus(), 0)
+    }
+  }, [layoutReady, loading, options])
 
   useEffect(() => {
     if (!layoutReady) return
