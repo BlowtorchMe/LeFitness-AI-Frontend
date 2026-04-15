@@ -380,7 +380,7 @@ export default function ChatPage() {
           <>
             <div
               ref={scrollContainerRef}
-              className="flex-1 overflow-y-auto px-5 pt-5 pb-3 min-h-0 pb-24"
+              className="flex-1 overflow-y-auto px-3 sm:px-5 pt-5 pb-3 min-h-0 pb-24"
             >
               <div className="space-y-6 pb-4">
                 {messages.map((msg, i) => (
@@ -442,7 +442,7 @@ export default function ChatPage() {
       </main>
 
       {layoutReady && (
-        <div className="sticky bottom-0 z-10 flex-shrink-0 w-full mt-auto bg-lefitness-bg pt-2">
+        <div className="sticky bottom-0 z-10 flex-shrink-0 w-full mt-auto bg-lefitness-bg pt-2 left-0 right-0">
           <div className="max-w-2xl mx-auto px-4">
             <div
               className="rounded-full py-0.5 mb-3 w-full pr-0.5 pl-2"
