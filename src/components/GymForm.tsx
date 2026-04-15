@@ -6,6 +6,7 @@ export interface GymFormValues {
   location: string
   phone: string
   booking_url: string
+  calendar_id: string
   is_active: boolean
 }
 
@@ -23,6 +24,7 @@ export const EMPTY_GYM_FORM: GymFormValues = {
   location: "",
   phone: "",
   booking_url: "",
+  calendar_id: "",
   is_active: true,
 }
 
@@ -72,6 +74,15 @@ export default function GymForm({
         <input
           value={form.booking_url}
           onChange={(e) => onChange({ ...form, booking_url: e.target.value })}
+          className="w-full rounded-md bg-lefitness-header text-lefitness-text text-sm p-2.5 border border-[#303030] focus:outline-none focus:ring-1 focus:ring-lefitness-muted"
+        />
+      </div>
+      <div>
+        <label className="block text-sm mb-1">Google Calendar ID</label>
+        <input
+          value={form.calendar_id}
+          placeholder="something@group.calendar.google.com"
+          onChange={(e) => onChange({ ...form, calendar_id: e.target.value })}
           className="w-full rounded-md bg-lefitness-header text-lefitness-text text-sm p-2.5 border border-[#303030] focus:outline-none focus:ring-1 focus:ring-lefitness-muted"
         />
       </div>

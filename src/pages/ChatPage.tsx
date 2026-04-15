@@ -150,6 +150,26 @@ export default function ChatPage() {
     persistCachedHistory(sessionId, messages)
   }, [messages, sessionId])
 
+  // Poll for proactive messages (e.g. booking confirmation from webhook)
+  useEffect(() => {
+    if (!sessionId) return
+    const interval = setInterval(() => {
+      if (loading) return
+      fetchChat(sessionId)
+        .then((data) => {
+          if (data.messages && data.messages.length > 0) {
+            const newBotMessages = data.messages.map((text) => ({
+              role: "bot" as const,
+              text,
+            }))
+            setMessages((prev) => [...prev, ...newBotMessages])
+          }
+        })
+        .catch(() => {})
+    }, 8000)
+    return () => clearInterval(interval)
+  }, [sessionId, loading])
+
   useEffect(() => {
     if (!langDropdownOpen) return
     const onOutside = (e: MouseEvent) => {
@@ -177,14 +197,21 @@ export default function ChatPage() {
 
   useEffect(() => {
     if (!layoutReady) return
-    if (messages.length > 0) return
     let cancelled = false
     setLoading(true)
     fetchChat(sessionId || undefined)
       .then((data) => {
         if (cancelled) return
-        if (data.history && data.history.length > 0) applyResponse(data, "history")
-        else applyResponse(data)
+        if (data.history && data.history.length > 0) {
+          // Server has history — use it as the authoritative source
+          applyResponse(data, "history")
+        } else {
+          // Server has no history — session was reset (e.g. DB cleared)
+          // Clear stale cache and show fresh welcome
+          if (sessionId) persistCachedHistory(sessionId, [])
+          setMessages([])
+          applyResponse(data)
+        }
       })
       .catch(() => {})
       .finally(() => {
@@ -193,7 +220,7 @@ export default function ChatPage() {
     return () => {
       cancelled = true
     }
-  }, [layoutReady, messages.length, sessionId])
+  }, [layoutReady, sessionId])
 
   const persistSession = (id: string) => {
     setSessionId(id)
