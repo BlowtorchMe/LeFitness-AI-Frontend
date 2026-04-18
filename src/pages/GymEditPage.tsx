@@ -36,6 +36,7 @@ export default function GymEditPage() {
           location: data.location,
           phone: data.phone || "",
           booking_url: data.booking_url,
+          calendar_id: data.calendar_id || "",
           is_active: data.is_active,
         })
       })

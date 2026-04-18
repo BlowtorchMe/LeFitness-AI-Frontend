@@ -32,6 +32,8 @@ function t(lang: string, key: string): string {
   return UI_STRINGS[locale]?.[key] ?? UI_STRINGS.en[key] ?? key
 }
 
+const HISTORY_STORAGE_PREFIX = "lefitness_chat_history:"
+
 interface ChatMessage {
   role: "user" | "bot"
   text?: string
@@ -49,6 +51,29 @@ interface ChatResponse {
   selected_gym?: { id: number; name: string } | null
 }
 
+function loadCachedHistory(sessionId: string): ChatMessage[] {
+  if (!sessionId) return []
+  try {
+    const raw = localStorage.getItem(`${HISTORY_STORAGE_PREFIX}${sessionId}`)
+    if (!raw) return []
+    const parsed = JSON.parse(raw) as ChatMessage[]
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter((item) => item && (item.role === "user" || item.role === "bot"))
+  } catch {
+    return []
+  }
+}
+
+function persistCachedHistory(sessionId: string, messages: ChatMessage[]) {
+  if (!sessionId) return
+  try {
+    localStorage.setItem(
+      `${HISTORY_STORAGE_PREFIX}${sessionId}`,
+      JSON.stringify(messages)
+    )
+  } catch {}
+}
+
 export default function ChatPage() {
   const [sessionId, setSessionId] = useState<string>(() => {
     try {
@@ -64,7 +89,18 @@ export default function ChatPage() {
       return "en"
     }
   })
-  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+    try {
+      const storedSessionId = localStorage.getItem("lefitness_chat_session")
+      if (storedSessionId) {
+        const cached = loadCachedHistory(storedSessionId)
+        return cached.length > 0 ? cached : []
+      }
+      return []
+    } catch {
+      return []
+    }
+  })
   const [options, setOptions] = useState<ChatResponse["options"]>([])
   const [input, setInput] = useState("")
   const [loading, setLoading] = useState(false)
@@ -110,13 +146,39 @@ export default function ChatPage() {
   }, [messages])
 
   useEffect(() => {
+    if (!sessionId || messages.length === 0) return
+    persistCachedHistory(sessionId, messages)
+  }, [messages, sessionId])
+
+  // Poll for proactive messages (e.g. booking confirmation from webhook)
+  useEffect(() => {
+    if (!sessionId) return
+    const interval = setInterval(() => {
+      if (loading) return
+      fetchChat(sessionId)
+        .then((data) => {
+          if (data.messages && data.messages.length > 0) {
+            const newBotMessages = data.messages.map((text) => ({
+              role: "bot" as const,
+              text,
+            }))
+            setMessages((prev) => [...prev, ...newBotMessages])
+          }
+        })
+        .catch(() => {})
+    }, 8000)
+    return () => clearInterval(interval)
+  }, [sessionId, loading])
+
+  useEffect(() => {
     if (!langDropdownOpen) return
     const onOutside = (e: MouseEvent) => {
       if (
         langDropdownRef.current &&
         !langDropdownRef.current.contains(e.target as Node)
-      )
+      ) {
         setLangDropdownOpen(false)
+      }
     }
     document.addEventListener("mousedown", onOutside)
     return () => document.removeEventListener("mousedown", onOutside)
@@ -126,35 +188,39 @@ export default function ChatPage() {
     setLayoutReady(true)
   }, [])
 
-  // only focus on first page load, not after every message
   useEffect(() => {
     if (!layoutReady) return
-    inputRef.current?.focus()
-  }, [layoutReady])
+    if (!loading && (!options || options.length === 0)) {
+      setTimeout(() => inputRef.current?.focus(), 0)
+    }
+  }, [layoutReady, loading, options])
 
   useEffect(() => {
     if (!layoutReady) return
-    if (sessionId && messages.length === 0) {
-      let cancelled = false
-      setLoading(true)
-      fetchChat(sessionId)
-        .then((data) => {
-          if (cancelled) return
-          if (data.history && data.history.length > 0) applyResponse(data, "history")
-          else applyResponse(data)
-        })
-        .catch(() => {})
-        .finally(() => {
-          if (!cancelled) setLoading(false)
-        })
-      return () => {
-        cancelled = true
-      }
+    let cancelled = false
+    setLoading(true)
+    fetchChat(sessionId || undefined)
+      .then((data) => {
+        if (cancelled) return
+        if (data.history && data.history.length > 0) {
+          // Server has history — use it as the authoritative source
+          applyResponse(data, "history")
+        } else {
+          // Server has no history — session was reset (e.g. DB cleared)
+          // Clear stale cache and show fresh welcome
+          if (sessionId) persistCachedHistory(sessionId, [])
+          setMessages([])
+          applyResponse(data)
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
     }
-    if (!sessionId && messages.length === 0) {
-      startChat()
-    }
-  }, [layoutReady])
+  }, [layoutReady, sessionId])
 
   const persistSession = (id: string) => {
     setSessionId(id)
@@ -180,7 +246,17 @@ export default function ChatPage() {
         })
         .catch(() => {})
         .finally(() => setLoading(false))
+      return
     }
+    setMessages([])
+    setLoading(true)
+    fetchChat(undefined, undefined, newLang)
+      .then((data) => {
+        if (data.history && data.history.length > 0) applyResponse(data, "history")
+        else applyResponse(data)
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
   }
 
   const fetchChat = async (
@@ -198,27 +274,11 @@ export default function ChatPage() {
         language: lang,
       }),
     })
-    if (!res.ok)
+    if (!res.ok) {
       throw new Error(res.status === 500 ? "Server error" : "Failed to start chat")
+    }
     const data = await res.json()
     return data
-  }
-
-  const startChat = async () => {
-    if (loading) return
-    setLoading(true)
-    try {
-      const data = await fetchChat(sessionId || undefined)
-      if (data.history && data.history.length > 0) applyResponse(data, "history")
-      else applyResponse(data)
-    } catch {
-      setMessages((prev) => [
-        ...prev,
-        { role: "bot", text: t(language, "errorConnect") },
-      ])
-    } finally {
-      setLoading(false)
-    }
   }
 
   const sendMessage = async (e?: FormEvent) => {
@@ -293,7 +353,7 @@ export default function ChatPage() {
   }
 
   const formatMessage = (text: string) => {
-    return text.split(/\n/g).map((line, i) => {
+    return text.split(/\n/g).map((line, i, lines) => {
       const parts = line.split(/(https?:\/\/[^\s]+)/g)
       return (
         <span key={i}>
@@ -312,7 +372,7 @@ export default function ChatPage() {
               part
             )
           )}
-          {i < text.split(/\n/g).length - 1 ? <br /> : null}
+          {i < lines.length - 1 ? <br /> : null}
         </span>
       )
     })
@@ -459,7 +519,11 @@ export default function ChatPage() {
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={handleKeyDown}
-                    placeholder={options && options.length > 0 ? "Select an option above" : t(language, "placeholder")}
+                    placeholder={
+                      options && options.length > 0
+                        ? "Select an option above"
+                        : t(language, "placeholder")
+                    }
                     disabled={loading || !!(options && options.length > 0)}
                     className="flex-1 min-w-0 bg-transparent px-1.5 py-0.5 text-base text-lefitness-text placeholder-lefitness-muted focus:outline-none focus:ring-0 border-0 rounded-none"
                   />
