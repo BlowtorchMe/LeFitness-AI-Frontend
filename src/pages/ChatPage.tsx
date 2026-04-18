@@ -126,10 +126,11 @@ export default function ChatPage() {
     setLayoutReady(true)
   }, [])
 
+  // only focus on first page load, not after every message
   useEffect(() => {
     if (!layoutReady) return
     inputRef.current?.focus()
-  }, [layoutReady, loading])
+  }, [layoutReady])
 
   useEffect(() => {
     if (!layoutReady) return
@@ -224,11 +225,13 @@ export default function ChatPage() {
     e?.preventDefault()
     const text = input.trim()
     if (!text || loading) return
+    inputRef.current?.blur() // closes the keyboard on mobile
     setInput("")
     setMessages((prev) => [...prev, { role: "user", text }])
     setOptions([])
     setLoading(true)
-    requestAnimationFrame(() => inputRef.current?.focus())
+    // removed requestAnimationFrame(() => inputRef.current?.focus())
+    // that line was immediately reopening the keyboard right afterthe blur() closed it
     try {
       const res = await fetch(apiUrl(`/api/chat/`), {
         method: "POST",
@@ -250,7 +253,6 @@ export default function ChatPage() {
     } finally {
       setLoading(false)
     }
-    inputRef.current?.focus()
   }
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
@@ -315,10 +317,9 @@ export default function ChatPage() {
       )
     })
   }
-
   return (
-    <div className="min-h-screen bg-lefitness-bg text-lefitness-text flex flex-col">
-      <header className="header-outer sticky top-0 z-20 flex-shrink-0 bg-lefitness-header header-sticky-bg opacity-85">
+    <div className="h-full overflow-hidden bg-lefitness-bg text-lefitness-text flex flex-col overscroll-none">
+      <header className="header-outer sticky top-0 z-20 flex-shrink-0 bg-lefitness-header header-sticky-bg">
         <div className="header-row max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
           <a
             href="https://lefitness.se"
@@ -366,7 +367,7 @@ export default function ChatPage() {
         </div>
       </header>
 
-      <main className="flex-1 flex flex-col max-w-2xl w-full mx-auto min-w-0">
+      <main className="flex-1 min-h-0 overflow-hidden flex flex-col max-w-2xl w-full mx-auto">
         {!layoutReady && (
           <div className="flex-1 flex flex-col items-center justify-center py-12">
             <div className="spinner" />
@@ -380,8 +381,7 @@ export default function ChatPage() {
           <>
             <div
               ref={scrollContainerRef}
-              className="flex-1 overflow-y-auto px-3 sm:px-5 pt-5 pb-3 min-h-0 pb-24"
-            >
+              className="flex-1 overflow-y-auto min-h-0 px-3 sm:px-5 pt-5 pb-6">
               <div className="space-y-6 pb-4">
                 {messages.map((msg, i) => (
                   <div
@@ -442,7 +442,7 @@ export default function ChatPage() {
       </main>
 
       {layoutReady && (
-        <div className="sticky bottom-0 z-10 flex-shrink-0 w-full mt-auto bg-lefitness-bg pt-2 left-0 right-0">
+        <div className="flex-shrink-0 w-full bg-lefitness-bg pt-2">
           <div className="max-w-2xl mx-auto px-4">
             <div
               className="rounded-full py-0.5 mb-3 w-full pr-0.5 pl-2"
@@ -461,7 +461,7 @@ export default function ChatPage() {
                     onKeyDown={handleKeyDown}
                     placeholder={options && options.length > 0 ? "Select an option above" : t(language, "placeholder")}
                     disabled={loading || !!(options && options.length > 0)}
-                    className="flex-1 min-w-0 bg-transparent px-1.5 py-0.5 text-sm text-lefitness-text placeholder-lefitness-muted focus:outline-none focus:ring-0 border-0 rounded-none"
+                    className="flex-1 min-w-0 bg-transparent px-1.5 py-0.5 text-base text-lefitness-text placeholder-lefitness-muted focus:outline-none focus:ring-0 border-0 rounded-none"
                   />
                   <button
                     type="submit"
