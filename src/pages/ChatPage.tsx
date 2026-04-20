@@ -195,8 +195,13 @@ export default function ChatPage() {
     }
   }, [layoutReady, loading, options])
 
+  const hasInitialized = useRef(false)
+
   useEffect(() => {
     if (!layoutReady) return
+    if (hasInitialized.current) return
+    hasInitialized.current = true
+
     let cancelled = false
     setLoading(true)
     fetchChat(sessionId || undefined)
