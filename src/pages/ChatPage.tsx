@@ -225,7 +225,7 @@ export default function ChatPage() {
     return () => {
       cancelled = true
     }
-  }, [layoutReady, sessionId])
+  }, [layoutReady])
 
   const persistSession = (id: string) => {
     setSessionId(id)
