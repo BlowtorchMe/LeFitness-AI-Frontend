@@ -9,6 +9,7 @@ export default function FaqEditPage() {
   const navigate = useNavigate()
   const [question, setQuestion] = useState("")
   const [answer, setAnswer] = useState("")
+  const [sourceLang, setSourceLang] = useState<"en" | "sv">("en")
   const [videoLink, setVideoLink] = useState("")
   const [loading, setLoading] = useState(false)
   const [fetchError, setFetchError] = useState("")
@@ -81,6 +82,7 @@ export default function FaqEditPage() {
         body: JSON.stringify({
           question: q,
           answer: a,
+          source_lang: sourceLang,
           video_link: videoLink.trim() || null,
           gym_ids: gymIds,
         }),
@@ -132,6 +134,28 @@ export default function FaqEditPage() {
 
         {!fetchError && (
           <form onSubmit={handleSubmit} className="space-y-3">
+            <div>
+              <label className="block text-sm mb-2">Answer language</label>
+              <div className="flex gap-2">
+                {(["en", "sv"] as const).map((lang) => (
+                  <button
+                    key={lang}
+                    type="button"
+                    onClick={() => setSourceLang(lang)}
+                    className={`px-4 py-1.5 rounded-md text-sm border ${
+                      sourceLang === lang
+                        ? "bg-[#ffffff] text-black border-[#ffffff]"
+                        : "bg-lefitness-header text-lefitness-muted border-[#303030] hover:border-lefitness-muted"
+                    }`}
+                  >
+                    {lang === "en" ? "English" : "Swedish"}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-lefitness-muted mt-1">
+                Write in the selected language — the other language is auto-translated on save.
+              </p>
+            </div>
             <div>
               <label className="block text-sm mb-1">Question</label>
               <textarea

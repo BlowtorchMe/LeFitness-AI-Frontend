@@ -21,6 +21,7 @@ interface ImportResponse {
 export default function FaqAddPage() {
   const [singleQuestion, setSingleQuestion] = useState("")
   const [singleAnswer, setSingleAnswer] = useState("")
+  const [singleSourceLang, setSingleSourceLang] = useState<"en" | "sv">("en")
   const [singleVideoLink, setSingleVideoLink] = useState("")
   const [singleLoading, setSingleLoading] = useState(false)
 
@@ -67,6 +68,7 @@ export default function FaqAddPage() {
         body: JSON.stringify({
           question: q,
           answer: a,
+          source_lang: singleSourceLang,
           video_link: singleVideoLink.trim() || null,
           gym_ids: singleGymIds,
         }),
@@ -191,6 +193,28 @@ export default function FaqAddPage() {
         <section>
           <h2 className="text-lg font-semibold mb-3">Add one FAQ</h2>
           <form onSubmit={handleCreateOne} className="space-y-3">
+            <div>
+              <label className="block text-sm mb-2">Answer language</label>
+              <div className="flex gap-2">
+                {(["en", "sv"] as const).map((lang) => (
+                  <button
+                    key={lang}
+                    type="button"
+                    onClick={() => setSingleSourceLang(lang)}
+                    className={`px-4 py-1.5 rounded-md text-sm border ${
+                      singleSourceLang === lang
+                        ? "bg-[#ffffff] text-black border-[#ffffff]"
+                        : "bg-lefitness-header text-lefitness-muted border-[#303030] hover:border-lefitness-muted"
+                    }`}
+                  >
+                    {lang === "en" ? "English" : "Swedish"}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-lefitness-muted mt-1">
+                Write in the selected language — the other language is auto-translated on save.
+              </p>
+            </div>
             <div>
               <label className="block text-sm mb-1">Question</label>
               <textarea

@@ -32,8 +32,6 @@ function t(lang: string, key: string): string {
   return UI_STRINGS[locale]?.[key] ?? UI_STRINGS.en[key] ?? key
 }
 
-const HISTORY_STORAGE_PREFIX = "lefitness_chat_history:"
-
 interface ChatMessage {
   role: "user" | "bot"
   text?: string
@@ -51,56 +49,12 @@ interface ChatResponse {
   selected_gym?: { id: number; name: string } | null
 }
 
-function loadCachedHistory(sessionId: string): ChatMessage[] {
-  if (!sessionId) return []
-  try {
-    const raw = localStorage.getItem(`${HISTORY_STORAGE_PREFIX}${sessionId}`)
-    if (!raw) return []
-    const parsed = JSON.parse(raw) as ChatMessage[]
-    if (!Array.isArray(parsed)) return []
-    return parsed.filter((item) => item && (item.role === "user" || item.role === "bot"))
-  } catch {
-    return []
-  }
-}
-
-function persistCachedHistory(sessionId: string, messages: ChatMessage[]) {
-  if (!sessionId) return
-  try {
-    localStorage.setItem(
-      `${HISTORY_STORAGE_PREFIX}${sessionId}`,
-      JSON.stringify(messages)
-    )
-  } catch {}
-}
-
 export default function ChatPage() {
   const [sessionId, setSessionId] = useState<string>(() => {
-    try {
-      return localStorage.getItem("lefitness_chat_session") || ""
-    } catch {
-      return ""
-    }
+    try { return localStorage.getItem("lefitness_chat_session") || "" } catch { return "" }
   })
-  const [language, setLanguage] = useState<string>(() => {
-    try {
-      return localStorage.getItem("lefitness_lang") || "en"
-    } catch {
-      return "en"
-    }
-  })
-  const [messages, setMessages] = useState<ChatMessage[]>(() => {
-    try {
-      const storedSessionId = localStorage.getItem("lefitness_chat_session")
-      if (storedSessionId) {
-        const cached = loadCachedHistory(storedSessionId)
-        return cached.length > 0 ? cached : []
-      }
-      return []
-    } catch {
-      return []
-    }
-  })
+  const [language, setLanguage] = useState<string>("en")
+  const [messages, setMessages] = useState<ChatMessage[]>([])
   const [options, setOptions] = useState<ChatResponse["options"]>([])
   const [input, setInput] = useState("")
   const [loading, setLoading] = useState(false)
@@ -119,8 +73,11 @@ export default function ChatPage() {
     data: ChatResponse,
     mode: "append" | "history" = "append"
   ) => {
-    if (data.session_id) persistSession(data.session_id)
-    if (data.language && data.language !== language) setLang(data.language)
+    if (data.session_id) {
+      setSessionId(data.session_id)
+      try { localStorage.setItem("lefitness_chat_session", data.session_id) } catch {}
+    }
+    if (data.language && data.language !== language) setLanguage(data.language)
     setOptions(data.options || [])
     if (mode === "history" && data.history && data.history.length > 0) {
       setMessages(
@@ -145,30 +102,24 @@ export default function ChatPage() {
     scrollToBottom()
   }, [messages])
 
-  useEffect(() => {
-    if (!sessionId || messages.length === 0) return
-    persistCachedHistory(sessionId, messages)
-  }, [messages, sessionId])
-
-  // Poll for proactive messages (e.g. booking confirmation from webhook)
+  // SSE: receive push events (e.g. booking confirmation from webhook)
   useEffect(() => {
     if (!sessionId) return
-    const interval = setInterval(() => {
-      if (loading) return
+    const es = new EventSource(apiUrl(`/api/chat/stream/${sessionId}`))
+    es.addEventListener("booking_confirmed", () => {
       fetchChat(sessionId)
         .then((data) => {
           if (data.messages && data.messages.length > 0) {
-            const newBotMessages = data.messages.map((text) => ({
-              role: "bot" as const,
-              text,
-            }))
-            setMessages((prev) => [...prev, ...newBotMessages])
+            setMessages((prev) => [
+              ...prev,
+              ...data.messages!.map((text) => ({ role: "bot" as const, text })),
+            ])
           }
         })
         .catch(() => {})
-    }, 8000)
-    return () => clearInterval(interval)
-  }, [sessionId, loading])
+    })
+    return () => es.close()
+  }, [sessionId])
 
   useEffect(() => {
     if (!langDropdownOpen) return
@@ -208,12 +159,8 @@ export default function ChatPage() {
       .then((data) => {
         if (cancelled) return
         if (data.history && data.history.length > 0) {
-          // Server has history — use it as the authoritative source
           applyResponse(data, "history")
         } else {
-          // Server has no history — session was reset (e.g. DB cleared)
-          // Clear stale cache and show fresh welcome
-          if (sessionId) persistCachedHistory(sessionId, [])
           setMessages([])
           applyResponse(data)
         }
@@ -227,22 +174,8 @@ export default function ChatPage() {
     }
   }, [layoutReady])
 
-  const persistSession = (id: string) => {
-    setSessionId(id)
-    try {
-      localStorage.setItem("lefitness_chat_session", id)
-    } catch {}
-  }
-
-  const setLang = (lang: string) => {
-    setLanguage(lang)
-    try {
-      localStorage.setItem("lefitness_lang", lang)
-    } catch {}
-  }
-
   const handleLanguageChange = (newLang: string) => {
-    setLang(newLang)
+    setLanguage(newLang)
     if (sessionId) {
       setLoading(true)
       fetchChat(sessionId, undefined, newLang)

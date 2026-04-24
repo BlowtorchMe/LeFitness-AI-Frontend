@@ -1,4 +1,4 @@
-import { useState, useEffect, ChangeEvent } from "react"
+import { useState, useEffect, useRef, ChangeEvent } from "react"
 import { Link } from "react-router-dom"
 import AdminHeader from "@/components/AdminHeader"
 import { adminFetch } from "@/lib/api"
@@ -22,6 +22,11 @@ export default function FaqListPage() {
   const [reindexMessage, setReindexMessage] = useState("")
   const [gyms, setGyms] = useState<GymRecord[]>([])
   const showReindexButton = false
+  const [exporting, setExporting] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [importMessage, setImportMessage] = useState("")
+  const [importError, setImportError] = useState("")
+  const importFileRef = useRef<HTMLInputElement>(null)
 
   const totalPages = Math.max(1, Math.ceil(total / size))
 
@@ -116,6 +121,57 @@ export default function FaqListPage() {
     }
   }
 
+  const handleExport = async () => {
+    setExporting(true)
+    try {
+      const res = await adminFetch("/api/faq/export")
+      if (!res.ok) throw new Error("Export failed")
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = "faqs.json"
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Export failed")
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  const handleImportFile = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImportMessage("")
+    setImportError("")
+    setImporting(true)
+    try {
+      const text = await file.text()
+      const parsed = JSON.parse(text)
+      if (!Array.isArray(parsed)) throw new Error("JSON must be an array")
+      const res = await adminFetch("/api/faq/import?reindex=true", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(parsed),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.detail || "Import failed")
+      setImportMessage(`Imported ${data.imported} FAQ(s).${data.reindex_count ? ` Indexed ${data.reindex_count}.` : ""}`)
+      setPage(1)
+      // Reload list
+      const listRes = await adminFetch(`/api/faq?page=1&size=${size}`)
+      const listData = await listRes.json()
+      setItems(listData.items)
+      setTotal(listData.total)
+    } catch (e) {
+      setImportError(e instanceof Error ? e.message : "Import failed")
+    } finally {
+      setImporting(false)
+      if (importFileRef.current) importFileRef.current.value = ""
+    }
+  }
+
   const iconBtn =
     "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 border-0 cursor-pointer"
   const editIcon = (
@@ -205,6 +261,25 @@ export default function FaqListPage() {
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-lg font-semibold">Frequently Asked Questions</h1>
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={exporting || total === 0}
+              onClick={handleExport}
+              className="inline-flex items-center px-4 py-2 rounded-md text-sm bg-[#2a2a2a] text-lefitness-text border border-[#303030] hover:bg-[#333] disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {exporting ? "Exporting..." : "Export"}
+            </button>
+            <label className={`inline-flex items-center px-4 py-2 rounded-md text-sm border border-[#303030] cursor-pointer ${importing ? "opacity-50 cursor-not-allowed bg-[#2a2a2a] text-lefitness-text" : "bg-[#2a2a2a] text-lefitness-text hover:bg-[#333]"}`}>
+              {importing ? "Importing..." : "Import"}
+              <input
+                ref={importFileRef}
+                type="file"
+                accept=".json,application/json"
+                className="hidden"
+                disabled={importing}
+                onChange={handleImportFile}
+              />
+            </label>
             {showReindexButton && (
               <button
                 type="button"
@@ -249,6 +324,12 @@ export default function FaqListPage() {
           >
             {reindexMessage}
           </p>
+        )}
+        {importMessage && (
+          <p className="text-sm mb-4 text-green-400">{importMessage}</p>
+        )}
+        {importError && (
+          <p className="text-sm mb-4 text-red-400">{importError}</p>
         )}
 
         <div className="flex items-center gap-4 mb-4">
